@@ -108,17 +108,37 @@ jobs:
         run: |
           mkdir -p firmware_output
 
-          # app.bin suchen und kopieren
-          APP=$(find . -name "app.bin" 2>/dev/null | head -1)
-          if [ -n "$APP" ]; then
-            cp "$APP" firmware_output/app.bin
+          echo "=== Inhalt cpu/br23/tools/ ==="
+          ls -lh cpu/br23/tools/*.bin cpu/br23/tools/*.elf cpu/br23/tools/*.ufw 2>/dev/null || true
+
+          # app.bin ist in cpu/br23/tools/ (dort landet sdk.elf + app.bin nach build)
+          if [ -f "cpu/br23/tools/app.bin" ]; then
+            cp cpu/br23/tools/app.bin firmware_output/app.bin
             echo "✓ app.bin: $(wc -c < firmware_output/app.bin) bytes"
           else
-            echo "✗ app.bin nicht gefunden!"
+            echo "✗ app.bin nicht in cpu/br23/tools/ — erzeuge aus sdk.elf..."
+            ELF="cpu/br23/tools/sdk.elf"
+            OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -o -name "objcopy" -type f 2>/dev/null | head -1)
+            if [ -f "$ELF" ] && [ -n "$OBJCOPY" ]; then
+              cd cpu/br23/tools
+              $OBJCOPY -O binary -j .text       sdk.elf text.bin      2>/dev/null || touch text.bin
+              $OBJCOPY -O binary -j .data       sdk.elf data.bin      2>/dev/null || touch data.bin
+              $OBJCOPY -O binary -j .data_code  sdk.elf data_code.bin 2>/dev/null || touch data_code.bin
+              $OBJCOPY -O binary -j .overlay_mp3 sdk.elf mp3.bin      2>/dev/null || touch mp3.bin
+              cat text.bin data.bin data_code.bin mp3.bin > app.bin
+              echo "✓ app.bin erzeugt: $(wc -c < app.bin) bytes"
+              cp app.bin $GITHUB_WORKSPACE/firmware_output/app.bin
+              cd $GITHUB_WORKSPACE
+            else
+              echo "✗ sdk.elf oder objcopy nicht gefunden!"
+            fi
           fi
 
-          # ufw suchen und kopieren
-          UFW=$(find . -name "*.ufw" 2>/dev/null | head -1)
+          # ufw kopieren
+          UFW=$(find cpu/br23/tools -name "*.ufw" 2>/dev/null | head -1)
+          if [ -z "$UFW" ]; then
+            UFW=$(find . -name "*.ufw" 2>/dev/null | head -1)
+          fi
           if [ -n "$UFW" ]; then
             cp "$UFW" firmware_output/zuupah_pen_firmware.ufw
             echo "✓ ufw: $(wc -c < firmware_output/zuupah_pen_firmware.ufw) bytes"
