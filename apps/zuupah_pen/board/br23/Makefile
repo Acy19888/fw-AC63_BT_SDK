@@ -117,13 +117,9 @@ INCLUDES := \
 
 # ─── Source Files ─────────────────────────────────────────────────────────────
 c_SRC_FILES := \
-	\
-	# ── Zuupah eigener Code ──────────────────────────────────────────
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_main.c \
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_ble.c \
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_spp.c \
-	\
-	# ── SDK Kern ─────────────────────────────────────────────────────
 	../../../../apps/spp_and_le/config/lib_btctrler_config.c \
 	../../../../apps/spp_and_le/config/lib_btstack_config.c \
 	../../../../apps/spp_and_le/config/lib_driver_config.c \
@@ -132,11 +128,7 @@ c_SRC_FILES := \
 	../../../../apps/spp_and_le/config/lib_system_config.c \
 	../../../../apps/spp_and_le/config/lib_update_config.c \
 	../../../../apps/spp_and_le/config/log_config.c \
-	\
-	# ── Board Support (AC635N ≈ AC695X br23 platform) ────────────────
 	../../../../apps/spp_and_le/board/br23/board_ac635n_demo.c \
-	\
-	# ── BT Common ────────────────────────────────────────────────────
 	../../../../apps/spp_and_le/modules/bt/app_comm_ble.c \
 	../../../../apps/spp_and_le/modules/bt/app_comm_edr.c \
 	../../../../apps/spp_and_le/modules/bt/spp_trans.c \
@@ -144,13 +136,9 @@ c_SRC_FILES := \
 	../../../../apps/spp_and_le/modules/power/app_power_manage.c \
 	../../../../apps/spp_and_le/modules/user_cfg.c \
 	../../../../apps/spp_and_le/version.c \
-	\
-	# ── JieLi GATT Common ────────────────────────────────────────────
 	../../../../apps/common/third_party_profile/jieli/gatt_common/le_gatt_common.c \
 	../../../../apps/common/third_party_profile/jieli/gatt_common/le_gatt_server.c \
 	../../../../apps/common/third_party_profile/common/custom_cfg.c \
-	\
-	# ── CPU Support ──────────────────────────────────────────────────
 	../../../../cpu/br23/adc_api.c \
 	../../../../cpu/br23/setup.c \
 	../../../../cpu/br23/clock_manager.c \
