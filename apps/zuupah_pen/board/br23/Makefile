@@ -214,7 +214,6 @@ all: pre_build $(OUT_ELF)
 	$(info )
 	$(info ✓ Zuupah Firmware erfolgreich kompiliert!)
 	$(info )
-	$(QUITE) $(RUN_POST_SCRIPT) sdk
 	$(QUITE) $(OBJCOPY) -O binary -j .text       $(OUT_ELF) ../../../../cpu/br23/tools/text.bin      2>/dev/null || true
 	$(QUITE) $(OBJCOPY) -O binary -j .data       $(OUT_ELF) ../../../../cpu/br23/tools/data.bin      2>/dev/null || true
 	$(QUITE) $(OBJCOPY) -O binary -j .data_code  $(OUT_ELF) ../../../../cpu/br23/tools/data_code.bin 2>/dev/null || true
@@ -224,6 +223,7 @@ all: pre_build $(OUT_ELF)
 	$(QUITE) $(OBJCOPY) -O binary -j .overlay_wma $(OUT_ELF) ../../../../cpu/br23/tools/wma.bin      2>/dev/null || true
 	$(QUITE) cat ../../../../cpu/br23/tools/text.bin ../../../../cpu/br23/tools/data.bin ../../../../cpu/br23/tools/data_code.bin ../../../../cpu/br23/tools/aec.bin ../../../../cpu/br23/tools/wav.bin ../../../../cpu/br23/tools/mp3.bin ../../../../cpu/br23/tools/wma.bin > ../../../../cpu/br23/tools/app.bin
 	$(info ✓ app.bin erzeugt)
+	$(QUITE) $(RUN_POST_SCRIPT) sdk
 
 pre_build:
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../../cpu/br23/sdk_used_list.c -o ../../../../cpu/br23/sdk_used_list.used
