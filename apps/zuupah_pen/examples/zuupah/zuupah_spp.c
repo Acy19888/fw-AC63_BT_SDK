@@ -77,7 +77,7 @@ static void spp_send(const char *msg)
 static void flush_write_buf(void)
 {
     if (g_file && g_write_pos > 0) {
-        fwrite(g_write_buf, 1, g_write_pos, g_file);
+        fwrite(g_file, g_write_buf, g_write_pos);
         g_write_pos = 0;
     }
 }
@@ -119,7 +119,7 @@ static u32 file_crc32(const char *path)
     u32 crc = 0xFFFFFFFF;
     u8 buf[512];
     int n;
-    while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+    while ((n = fread(f, buf, sizeof(buf))) > 0) {
         for (int i = 0; i < n; i++) crc = crc32_byte(crc, buf[i]);
     }
     fclose(f);
