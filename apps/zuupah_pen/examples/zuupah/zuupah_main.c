@@ -197,32 +197,50 @@ static int zuupah_app_init(void)
     return 0;
 }
 
-/* ─── App Task Loop ──────────────────────────────────────────────────────────*/
-static void zuupah_app_task(void *p)
+/* ─── Periodic Timer Callback (every 1 second) ───────────────────────────────*/
+static void zuupah_timer_handler(void *priv)
 {
-    zuupah_app_init();
-
-    while (1) {
-        /* Sleep-Logik */
-        zuupah_sleep_tick();
-
-        /* Batterie + Speicher überwachen */
-        zuupah_monitor_tick();
-
-        /* 1 Sekunde warten */
-        os_time_dly(100); /* JieLi: 100 ticks = 1 Sek (10ms/tick) */
-    }
+    zuupah_sleep_tick();
+    zuupah_monitor_tick();
 }
 
-/* ─── App Entry Point ────────────────────────────────────────────────────────*/
-APP_REGISTER(zuupah_app) = {
-    .name   = "zuupah",
-    .init   = zuupah_app_init,
+/* ─── App State Machine ───────────────────────────────────────────────────────*/
+static int zuupah_state_machine(struct application *app, enum app_state state, struct intent *it)
+{
+    switch (state) {
+    case APP_STA_CREATE:
+        break;
+    case APP_STA_START:
+        zuupah_app_init();
+        /* Batterie/Sleep-Monitoring alle 1000ms */
+        sys_timer_add(NULL, zuupah_timer_handler, 1000);
+        break;
+    case APP_STA_PAUSE:
+        break;
+    case APP_STA_RESUME:
+        break;
+    case APP_STA_STOP:
+        break;
+    case APP_STA_DESTROY:
+        log_info("APP_STA_DESTROY");
+        break;
+    }
+    return 0;
+}
+
+static int zuupah_event_handler(struct application *app, struct sys_event *event)
+{
+    return FALSE;
+}
+
+static const struct application_operation zuupah_ops = {
+    .state_machine  = zuupah_state_machine,
+    .event_handler  = zuupah_event_handler,
 };
 
-/* Task starten */
-static void zuupah_task_start(void)
-{
-    task_create(zuupah_app_task, NULL, "zuupah_main");
-}
-SYS_CALL_REGISTER(zuupah_task_start, 10);
+REGISTER_APPLICATION(zuupah_app) = {
+    .name   = "zuupah",
+    .action = 0,
+    .ops    = &zuupah_ops,
+    .state  = APP_STA_DESTROY,
+};
