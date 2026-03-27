@@ -11,6 +11,7 @@
 
 #include "system/includes.h"
 #include "asm/power_interface.h"
+#include "os/os_api.h"
 
 /* ── exception_analyze ────────────────────────────────────────────────────── */
 /* Called from startup.S (.volatile_ram_code) in cpu.a.                       */
@@ -31,3 +32,7 @@ void p33_soft_reset(void)
      * in setup.c and will trigger a full system reset automatically. */
     while(1);
 }
+/* ── os_current_task indirect pointer ─────────────────────────────────────── */
+/* LTO otherwise truncates 23-bit jump from .text to .volatile_ram_code       */
+#undef os_current_task
+const char * (* volatile os_current_task_ptr)(void) = os_current_task;

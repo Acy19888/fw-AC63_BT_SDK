@@ -94,7 +94,8 @@ int os_task_create_affinity_core(void (*task)(void *p_arg),
  */
 /* ----------------------------------------------------------------------------*/
 const char *os_current_task();
-#define os_current_task() (((const char * (*volatile)(void))os_current_task)())
+extern const char * (* volatile os_current_task_ptr)(void);
+#define os_current_task() (os_current_task_ptr())
 
 /* --------------------------------------------------------------------------*/
 /**
