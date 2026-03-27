@@ -180,6 +180,7 @@ LFLAGS := \
 	--plugin-opt=-global-merge-on-const \
 	--sort-common \
 	--gc-sections \
+	--allow-multiple-definition \
 	--start-group \
 	../../../../cpu/br23/liba/cpu.a \
 	../../../../cpu/br23/liba/system.a \

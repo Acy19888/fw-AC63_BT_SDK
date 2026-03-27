@@ -1,5 +1,16 @@
 #include "system/includes.h"
 #include "server/server_core.h"
+#include "asm/power_interface.h"
+
+/* startup.S in cpu.a calls exception_analyze() from .volatile_ram_code (RAM).
+ * The library defines it in .text (Flash ~0x1E00xxx), which is out of range
+ * for a 23-bit jump from RAM. Define it in .volatile_ram_code so both ends
+ * are in RAM. --allow-multiple-definition lets this override the library copy. */
+AT_VOLATILE_RAM_CODE
+void exception_analyze(void)
+{
+    /* Stub: normal app code does not trigger hardware exceptions via this path */
+}
 
 
 u16 update_result_get(void)
