@@ -181,10 +181,7 @@ static int zuupah_app_init(void)
 {
     log_info("=== Zuupah Pen Firmware v1.0 ===");
 
-    /* Ordnerstruktur erstellen */
-    fmkdir("ZUUPAH");
-    fmkdir("ZUUPAH/BOOKS");
-    fmkdir("ZUUPAH/SOUNDS");
+    /* fopen erstellt Verzeichnisse automatisch beim ersten Dateizugriff */
 
     /* BT Stack starten (EDR + BLE) */
 #if TCFG_USER_EDR_ENABLE

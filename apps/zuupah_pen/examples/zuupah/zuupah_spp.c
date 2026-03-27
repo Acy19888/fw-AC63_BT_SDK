@@ -90,7 +90,7 @@ static void cleanup(int delete_file)
         g_file = NULL;
     }
     if (delete_file && g_filepath[0]) {
-        fdelete(g_filepath);
+        fdelete_by_name(g_filepath);
         log_info("Unvollständige Datei gelöscht: %s", g_filepath);
     }
     g_state      = SPP_IDLE;
@@ -208,8 +208,7 @@ static void zuupah_spp_receive_cbk(void *priv, u8 *data, u16 len)
 
             log_info("Transfer startet: %s (%lu Bytes)", g_filename, g_total_bytes);
 
-            /* Ordner + Datei erstellen */
-            fmkdir(BOOKS_DIR);
+            /* fopen erstellt Ordner automatisch */
             snprintf(g_filepath, sizeof(g_filepath), "%s%s", BOOKS_DIR, g_filename);
             g_file = fopen(g_filepath, "wb");
             if (!g_file) {
@@ -259,7 +258,7 @@ static void zuupah_spp_receive_cbk(void *priv, u8 *data, u16 len)
             if (actual_crc != g_expect_crc) {
                 log_info("FEHLER: CRC32 stimmt nicht! got=0x%08lx want=0x%08lx",
                          actual_crc, g_expect_crc);
-                fdelete(g_filepath);
+                fdelete_by_name(g_filepath);
                 cleanup(0);
                 spp_send("ERROR:checksum_fail\n");
                 return;
