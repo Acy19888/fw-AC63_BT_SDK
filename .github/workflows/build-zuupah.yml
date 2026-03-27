@@ -65,9 +65,17 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y make libssl-dev
 
-      # ── 6. Firmware kompilieren ───────────────────────────────────────────────
+      # ── 6. Firmware kompilieren + app.bin erzeugen ───────────────────────────
       - name: Build Zuupah Firmware
         run: |
+          # objcopy aus JieLi Toolchain finden
+          OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -type f 2>/dev/null | head -1)
+          if [ -z "$OBJCOPY" ]; then
+            OBJCOPY=$(find /opt/jieli -name "*objcopy*" -type f 2>/dev/null | head -1)
+          fi
+          echo "objcopy: $OBJCOPY"
+          echo "OBJCOPY_PATH=$OBJCOPY" >> $GITHUB_ENV
+
           cd apps/zuupah_pen/board/br23
 
           # ulimit erhöhen (JieLi Linker braucht viele offene Dateien)
@@ -76,48 +84,47 @@ jobs:
           echo "Starte Build..."
           make VERBOSE=1 2>&1 | tee /tmp/build.log
 
-          echo ""
-          echo "Build Status: $?"
+          echo "=== Alle erzeugten Dateien ==="
+          find . -name "*.elf" -o -name "*.bin" -o -name "*.ufw" 2>/dev/null
 
-      # ── 7. Firmware-Dateien extrahieren ──────────────────────────────────────
-      - name: Extract Firmware Files
-        run: |
-          echo "Suche Firmware-Dateien..."
-          find . -name "*.ufw" -o -name "sdk.elf" 2>/dev/null | head -10
-          mkdir -p firmware_output
-
-          # ELF finden
-          ELF=$(find . -name "sdk.elf" 2>/dev/null | head -1)
-          echo "ELF: $ELF"
-
-          # objcopy aus JieLi Toolchain finden
-          OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -type f 2>/dev/null | head -1)
-          if [ -z "$OBJCOPY" ]; then
-            OBJCOPY=$(find /opt/jieli -name "*objcopy*" -type f 2>/dev/null | head -1)
-          fi
-          echo "objcopy: $OBJCOPY"
-
-          # app.bin aus ELF-Sektionen erzeugen (identisch zu Windows download.bat)
-          if [ -n "$ELF" ] && [ -n "$OBJCOPY" ]; then
-            ELFDIR=$(dirname $ELF)
-            cd $ELFDIR
+          # app.bin direkt hier erzeugen, solange wir noch im Build-Verzeichnis sind
+          if [ -f "sdk.elf" ] && [ -n "$OBJCOPY" ]; then
+            echo "Erzeuge app.bin aus sdk.elf..."
             $OBJCOPY -O binary -j .text       sdk.elf text.bin      2>/dev/null || touch text.bin
             $OBJCOPY -O binary -j .data       sdk.elf data.bin      2>/dev/null || touch data.bin
             $OBJCOPY -O binary -j .data_code  sdk.elf data_code.bin 2>/dev/null || touch data_code.bin
             $OBJCOPY -O binary -j .overlay_mp3 sdk.elf mp3.bin      2>/dev/null || touch mp3.bin
             cat text.bin data.bin data_code.bin mp3.bin > app.bin
-            echo "✓ app.bin: $(wc -c < app.bin) bytes"
-            cp app.bin $GITHUB_WORKSPACE/firmware_output/app.bin
-            cd $GITHUB_WORKSPACE
+            echo "✓ app.bin erzeugt: $(wc -c < app.bin) bytes"
+          elif [ -f "app.bin" ]; then
+            echo "✓ app.bin bereits vorhanden: $(wc -c < app.bin) bytes"
+          else
+            echo "⚠ sdk.elf nicht gefunden, suche breiter..."
+            find /home /tmp $GITHUB_WORKSPACE -name "sdk.elf" 2>/dev/null | head -5
           fi
 
-          # ufw kopieren
+      # ── 7. Firmware-Dateien sammeln ───────────────────────────────────────────
+      - name: Collect Firmware Files
+        run: |
+          mkdir -p firmware_output
+
+          # app.bin suchen und kopieren
+          APP=$(find . -name "app.bin" 2>/dev/null | head -1)
+          if [ -n "$APP" ]; then
+            cp "$APP" firmware_output/app.bin
+            echo "✓ app.bin: $(wc -c < firmware_output/app.bin) bytes"
+          else
+            echo "✗ app.bin nicht gefunden!"
+          fi
+
+          # ufw suchen und kopieren
           UFW=$(find . -name "*.ufw" 2>/dev/null | head -1)
           if [ -n "$UFW" ]; then
             cp "$UFW" firmware_output/zuupah_pen_firmware.ufw
-            echo "✓ UFW: $UFW"
+            echo "✓ ufw: $(wc -c < firmware_output/zuupah_pen_firmware.ufw) bytes"
           fi
 
+          echo "=== firmware_output ==="
           ls -lh firmware_output/
 
       # ── 8. Build Log als Artifact hochladen ───────────────────────────────────
