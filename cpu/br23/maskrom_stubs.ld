@@ -1,13 +1,16 @@
-  memmem = ABSOLUTE(0x1127a4);
-  memcpy = ABSOLUTE(0x1127a8);
-  memmove = ABSOLUTE(0x1127ac);
-  memcmp = ABSOLUTE(0x1127b0);
-  memset = ABSOLUTE(0x1127b4);
-  strcmp = ABSOLUTE(0x1127b8);
-  strcpy = ABSOLUTE(0x1127bc);
-  strlen = ABSOLUTE(0x1127c0);
-  strncmp = ABSOLUTE(0x1127c4);
-  strstr = ABSOLUTE(0x1127c8);
+  /* Maskrom libc stubs at 0x1127xx are unreachable from Flash code at 0x1E00xxx
+   * via a 23-bit jump (~29 MB gap). Use libc.a implementations instead. */
+  /* memmem = ABSOLUTE(0x1127a4); */
+  /* memcpy = ABSOLUTE(0x1127a8); */
+  /* memmove = ABSOLUTE(0x1127ac); */
+  /* memcmp = ABSOLUTE(0x1127b0); */
+  /* memset = ABSOLUTE(0x1127b4); */
+  /* strcmp = ABSOLUTE(0x1127b8); */
+  /* strcpy = ABSOLUTE(0x1127bc); */
+  /* strlen = ABSOLUTE(0x1127c0); */
+  /* strncmp = ABSOLUTE(0x1127c4); */
+  /* strstr = ABSOLUTE(0x1127c8); */
+
   flush_dcache = ABSOLUTE(0x1127cc);
   flushinv_dcache = ABSOLUTE(0x1127d0);
   /* sfc_suspend = ABSOLUTE(0x1127d4); */
