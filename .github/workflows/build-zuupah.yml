@@ -7,6 +7,7 @@ on:
       - 'apps/zuupah_pen/**'
       - 'apps/spp_and_le/**'
       - 'cpu/br23/**'
+      - 'include_lib/**'
       - '.github/workflows/build-zuupah.yml'
   pull_request:
     branches: [ main, master ]
