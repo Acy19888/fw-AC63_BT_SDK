@@ -85,10 +85,18 @@ jobs:
           echo "=== cpu/br23/tools/ Inhalt ==="
           ls -lh cpu/br23/tools/ 2>/dev/null | grep -E "\.(bin|elf|ufw|ini)" || echo "(nichts gefunden)"
 
-          # objcopy aus JieLi Toolchain
-          OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -type f 2>/dev/null | head -1)
-          echo "objcopy: $OBJCOPY"
+          # objcopy aus JieLi Toolchain (Makefile nutzt /opt/jieli/pi32v2/bin/objcopy)
+          OBJCOPY="/opt/jieli/pi32v2/bin/objcopy"
+          if [ ! -f "$OBJCOPY" ]; then
+            OBJCOPY=$(find /opt/jieli -name "objcopy" -type f 2>/dev/null | head -1)
+          fi
+          if [ ! -f "$OBJCOPY" ]; then
+            OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -type f 2>/dev/null | head -1)
+          fi
+          echo "objcopy: $OBJCOPY (vorhanden: $(test -f "$OBJCOPY" && echo JA || echo NEIN))"
           echo "sdk.elf vorhanden: $(test -f $ELF && echo JA || echo NEIN)"
+          echo "=== /opt/jieli/pi32v2/bin/ ==="
+          ls /opt/jieli/pi32v2/bin/ 2>/dev/null | head -20 || echo "Ordner nicht gefunden"
 
           if [ -f "$ELF" ] && [ -n "$OBJCOPY" ]; then
             cd cpu/br23/tools
