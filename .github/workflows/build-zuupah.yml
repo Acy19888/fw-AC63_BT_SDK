@@ -79,27 +79,46 @@ jobs:
           echo ""
           echo "Build Status: $?"
 
-      # ── 7. Firmware-Datei finden ──────────────────────────────────────────────
-      - name: Find Firmware File
+      # ── 7. Firmware-Dateien extrahieren ──────────────────────────────────────
+      - name: Extract Firmware Files
         run: |
-          echo "Suche Firmware-Datei..."
-          find . -name "*.ufw" -o -name "*.bin" -o -name "sdk.elf" 2>/dev/null | head -10
+          echo "Suche Firmware-Dateien..."
+          find . -name "*.ufw" -o -name "sdk.elf" 2>/dev/null | head -10
+          mkdir -p firmware_output
 
-          # ufw Datei kopieren
+          # ELF finden
+          ELF=$(find . -name "sdk.elf" 2>/dev/null | head -1)
+          echo "ELF: $ELF"
+
+          # objcopy aus JieLi Toolchain finden
+          OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -type f 2>/dev/null | head -1)
+          if [ -z "$OBJCOPY" ]; then
+            OBJCOPY=$(find /opt/jieli -name "*objcopy*" -type f 2>/dev/null | head -1)
+          fi
+          echo "objcopy: $OBJCOPY"
+
+          # app.bin aus ELF-Sektionen erzeugen (identisch zu Windows download.bat)
+          if [ -n "$ELF" ] && [ -n "$OBJCOPY" ]; then
+            ELFDIR=$(dirname $ELF)
+            cd $ELFDIR
+            $OBJCOPY -O binary -j .text       sdk.elf text.bin      2>/dev/null || touch text.bin
+            $OBJCOPY -O binary -j .data       sdk.elf data.bin      2>/dev/null || touch data.bin
+            $OBJCOPY -O binary -j .data_code  sdk.elf data_code.bin 2>/dev/null || touch data_code.bin
+            $OBJCOPY -O binary -j .overlay_mp3 sdk.elf mp3.bin      2>/dev/null || touch mp3.bin
+            cat text.bin data.bin data_code.bin mp3.bin > app.bin
+            echo "✓ app.bin: $(wc -c < app.bin) bytes"
+            cp app.bin $GITHUB_WORKSPACE/firmware_output/app.bin
+            cd $GITHUB_WORKSPACE
+          fi
+
+          # ufw kopieren
           UFW=$(find . -name "*.ufw" 2>/dev/null | head -1)
           if [ -n "$UFW" ]; then
-            mkdir -p firmware_output
             cp "$UFW" firmware_output/zuupah_pen_firmware.ufw
-            echo "✓ Firmware: $UFW"
-          else
-            # Fallback: ELF kopieren
-            ELF=$(find . -name "sdk.elf" 2>/dev/null | head -1)
-            if [ -n "$ELF" ]; then
-              mkdir -p firmware_output
-              cp "$ELF" firmware_output/zuupah_pen_firmware.elf
-              echo "✓ ELF: $ELF"
-            fi
+            echo "✓ UFW: $UFW"
           fi
+
+          ls -lh firmware_output/
 
       # ── 8. Build Log als Artifact hochladen ───────────────────────────────────
       - name: Upload Build Log
