@@ -65,80 +65,56 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y make libssl-dev
 
-      # ── 6. Firmware kompilieren + app.bin erzeugen ───────────────────────────
+      # ── 6. Firmware kompilieren ───────────────────────────────────────────────
       - name: Build Zuupah Firmware
         run: |
-          # objcopy aus JieLi Toolchain finden
-          OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -type f 2>/dev/null | head -1)
-          if [ -z "$OBJCOPY" ]; then
-            OBJCOPY=$(find /opt/jieli -name "*objcopy*" -type f 2>/dev/null | head -1)
-          fi
-          echo "objcopy: $OBJCOPY"
-          echo "OBJCOPY_PATH=$OBJCOPY" >> $GITHUB_ENV
-
           cd apps/zuupah_pen/board/br23
-
-          # ulimit erhöhen (JieLi Linker braucht viele offene Dateien)
           ulimit -n 8096
-
           echo "Starte Build..."
           make VERBOSE=1 2>&1 | tee /tmp/build.log
+          echo "Build exit code: $?"
 
-          echo "=== Alle erzeugten Dateien ==="
-          find . -name "*.elf" -o -name "*.bin" -o -name "*.ufw" 2>/dev/null
-
-          # app.bin direkt hier erzeugen, solange wir noch im Build-Verzeichnis sind
-          if [ -f "sdk.elf" ] && [ -n "$OBJCOPY" ]; then
-            echo "Erzeuge app.bin aus sdk.elf..."
-            $OBJCOPY -O binary -j .text       sdk.elf text.bin      2>/dev/null || touch text.bin
-            $OBJCOPY -O binary -j .data       sdk.elf data.bin      2>/dev/null || touch data.bin
-            $OBJCOPY -O binary -j .data_code  sdk.elf data_code.bin 2>/dev/null || touch data_code.bin
-            $OBJCOPY -O binary -j .overlay_mp3 sdk.elf mp3.bin      2>/dev/null || touch mp3.bin
-            cat text.bin data.bin data_code.bin mp3.bin > app.bin
-            echo "✓ app.bin erzeugt: $(wc -c < app.bin) bytes"
-          elif [ -f "app.bin" ]; then
-            echo "✓ app.bin bereits vorhanden: $(wc -c < app.bin) bytes"
-          else
-            echo "⚠ sdk.elf nicht gefunden, suche breiter..."
-            find /home /tmp $GITHUB_WORKSPACE -name "sdk.elf" 2>/dev/null | head -5
-          fi
-
-      # ── 7. Firmware-Dateien sammeln ───────────────────────────────────────────
-      - name: Collect Firmware Files
+      # ── 7. app.bin manuell aus sdk.elf erzeugen ───────────────────────────────
+      - name: Generate app.bin from sdk.elf
         run: |
           mkdir -p firmware_output
 
-          echo "=== Inhalt cpu/br23/tools/ ==="
-          ls -lh cpu/br23/tools/*.bin cpu/br23/tools/*.elf cpu/br23/tools/*.ufw 2>/dev/null || true
+          # sdk.elf liegt in cpu/br23/tools/ (OUT_ELF im Makefile)
+          ELF="cpu/br23/tools/sdk.elf"
 
-          # app.bin ist in cpu/br23/tools/ (dort landet sdk.elf + app.bin nach build)
-          if [ -f "cpu/br23/tools/app.bin" ]; then
-            cp cpu/br23/tools/app.bin firmware_output/app.bin
-            echo "✓ app.bin: $(wc -c < firmware_output/app.bin) bytes"
+          echo "=== cpu/br23/tools/ Inhalt ==="
+          ls -lh cpu/br23/tools/ 2>/dev/null | grep -E "\.(bin|elf|ufw|ini)" || echo "(nichts gefunden)"
+
+          # objcopy aus JieLi Toolchain
+          OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -type f 2>/dev/null | head -1)
+          echo "objcopy: $OBJCOPY"
+          echo "sdk.elf vorhanden: $(test -f $ELF && echo JA || echo NEIN)"
+
+          if [ -f "$ELF" ] && [ -n "$OBJCOPY" ]; then
+            cd cpu/br23/tools
+
+            # Alle Sektionen extrahieren (gleich wie Windows download.bat)
+            $OBJCOPY -O binary -j .text        sdk.elf text.bin      2>/dev/null; [ -f text.bin ]      || touch text.bin
+            $OBJCOPY -O binary -j .data        sdk.elf data.bin      2>/dev/null; [ -f data.bin ]      || touch data.bin
+            $OBJCOPY -O binary -j .data_code   sdk.elf data_code.bin 2>/dev/null; [ -f data_code.bin ] || touch data_code.bin
+            $OBJCOPY -O binary -j .overlay_aec sdk.elf aec.bin       2>/dev/null; [ -f aec.bin ]       || touch aec.bin
+            $OBJCOPY -O binary -j .overlay_wav sdk.elf wav.bin       2>/dev/null; [ -f wav.bin ]       || touch wav.bin
+            $OBJCOPY -O binary -j .overlay_mp3 sdk.elf mp3.bin       2>/dev/null; [ -f mp3.bin ]       || touch mp3.bin
+            $OBJCOPY -O binary -j .overlay_wma sdk.elf wma.bin       2>/dev/null; [ -f wma.bin ]       || touch wma.bin
+
+            cat text.bin data.bin data_code.bin aec.bin wav.bin mp3.bin wma.bin > app.bin
+            echo "✓ app.bin: $(wc -c < app.bin) bytes"
+
+            cp app.bin $GITHUB_WORKSPACE/firmware_output/app.bin
+            cd $GITHUB_WORKSPACE
           else
-            echo "✗ app.bin nicht in cpu/br23/tools/ — erzeuge aus sdk.elf..."
-            ELF="cpu/br23/tools/sdk.elf"
-            OBJCOPY=$(find /opt/jieli -name "llvm-objcopy" -o -name "objcopy" -type f 2>/dev/null | head -1)
-            if [ -f "$ELF" ] && [ -n "$OBJCOPY" ]; then
-              cd cpu/br23/tools
-              $OBJCOPY -O binary -j .text       sdk.elf text.bin      2>/dev/null || touch text.bin
-              $OBJCOPY -O binary -j .data       sdk.elf data.bin      2>/dev/null || touch data.bin
-              $OBJCOPY -O binary -j .data_code  sdk.elf data_code.bin 2>/dev/null || touch data_code.bin
-              $OBJCOPY -O binary -j .overlay_mp3 sdk.elf mp3.bin      2>/dev/null || touch mp3.bin
-              cat text.bin data.bin data_code.bin mp3.bin > app.bin
-              echo "✓ app.bin erzeugt: $(wc -c < app.bin) bytes"
-              cp app.bin $GITHUB_WORKSPACE/firmware_output/app.bin
-              cd $GITHUB_WORKSPACE
-            else
-              echo "✗ sdk.elf oder objcopy nicht gefunden!"
-            fi
+            echo "✗ sdk.elf oder objcopy nicht gefunden!"
+            echo "Toolchain-Inhalt:"
+            find /opt/jieli -name "*objcopy*" 2>/dev/null | head -5
           fi
 
           # ufw kopieren
-          UFW=$(find cpu/br23/tools -name "*.ufw" 2>/dev/null | head -1)
-          if [ -z "$UFW" ]; then
-            UFW=$(find . -name "*.ufw" 2>/dev/null | head -1)
-          fi
+          UFW=$(find cpu/br23/tools . -name "*.ufw" 2>/dev/null | head -1)
           if [ -n "$UFW" ]; then
             cp "$UFW" firmware_output/zuupah_pen_firmware.ufw
             echo "✓ ufw: $(wc -c < firmware_output/zuupah_pen_firmware.ufw) bytes"
