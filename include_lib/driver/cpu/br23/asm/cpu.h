@@ -167,7 +167,7 @@ static inline void cpu_reset(void)
         __asm_csync(); \
 		(*(volatile int *)&(v)->counter); \
 	 })
-#if 0
+#if 1
 extern volatile int cpu_lock_cnt[];
 extern volatile int irq_lock_cnt[];
 
