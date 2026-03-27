@@ -11,7 +11,6 @@
 
 #include "system/includes.h"
 #include "asm/power_interface.h"
-#include "asm/p33.h"
 
 /* ── exception_analyze ────────────────────────────────────────────────────── */
 /* Called from startup.S (.volatile_ram_code) in cpu.a.                       */
