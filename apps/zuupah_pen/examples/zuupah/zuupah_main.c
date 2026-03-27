@@ -16,6 +16,8 @@
 #include "fs/fs.h"
 #include "asm/adc_api.h"     /* ADC für Batterie */
 #include "string.h"
+#include "btstack/btstack_task.h"
+#include "bt_common.h"
 
 #include "zuupah_ble.h"
 #include "zuupah_spp.h"
@@ -184,8 +186,16 @@ static int zuupah_app_init(void)
     fmkdir("ZUUPAH/BOOKS");
     fmkdir("ZUUPAH/SOUNDS");
 
-    /* BLE + SPP initialisieren */
-    zuupah_ble_init();
+    /* BT Stack starten (EDR + BLE) */
+#if TCFG_USER_EDR_ENABLE
+    btstack_edr_start_before_init(NULL, 0);
+#endif
+#if TCFG_USER_BLE_ENABLE
+    btstack_ble_start_before_init(NULL, 0);
+#endif
+    btstack_init();
+
+    /* SPP initialisieren */
     zuupah_spp_init();
 
     /* Aktivitäts-Timer starten */
