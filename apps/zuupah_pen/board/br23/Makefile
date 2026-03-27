@@ -96,24 +96,42 @@ DEFINES := \
 INCLUDES := \
 	-I../../../../include_lib \
 	-I../../../../include_lib/driver \
+	-I../../../../include_lib/driver/device \
 	-I../../../../include_lib/driver/cpu/br23 \
 	-I../../../../include_lib/system \
 	-I../../../../include_lib/system/generic \
+	-I../../../../include_lib/system/device \
 	-I../../../../include_lib/system/fs \
+	-I../../../../include_lib/system/ui \
+	-I../../../../include_lib/system/math/cpu/br23 \
 	-I../../../../include_lib/btctrler \
 	-I../../../../include_lib/btctrler/port/br23 \
+	-I../../../../include_lib/update \
+	-I../../../../include_lib/agreement \
 	-I../../../../include_lib/btstack \
 	-I../../../../include_lib/btstack/le \
+	-I../../../../include_lib/btstack/third_party/common \
+	-I../../../../include_lib/btstack/third_party/rcsp \
 	-I../../../../include_lib/media/media_develop \
+	-I../../../../include_lib/media/media_develop/media \
+	-I../../../../include_lib/media/media_develop/media/cpu/br23 \
+	-I../../../../include_lib/media/media_develop/media/cpu/br23/asm \
 	-I../../../../apps/spp_and_le/include \
 	-I../../../../apps/spp_and_le/board/br23 \
 	-I../../../../apps/common \
+	-I../../../../apps/common/device \
+	-I../../../../apps/common/device/usb \
 	-I../../../../apps/common/include \
+	-I../../../../apps/common/power_manage \
 	-I../../../../apps/common/third_party_profile/jieli \
 	-I../../../../apps/common/third_party_profile/jieli/gatt_common \
-	-I../../../../apps/zuupah_pen/examples/zuupah \
-	-I../../../../apps/common/device/usb \
+	-I../../../../apps/common/third_party_profile/jieli/JL_rcsp \
+	-I../../../../apps/common/third_party_profile/common \
+	-I../../../../include_lib/ai_stack/JL_rcsp \
 	-I../../../../cpu/br23 \
+	-I../../../../cpu/br23/audio_dec \
+	-I../../../../cpu/br23/audio_enc \
+	-I../../../../apps/zuupah_pen/examples/zuupah \
 	-I$(SYS_INC_DIR) \
 
 # ─── Source Files ─────────────────────────────────────────────────────────────
