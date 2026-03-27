@@ -141,6 +141,7 @@ INCLUDES := \
 # ─── Source Files ─────────────────────────────────────────────────────────────
 c_SRC_FILES := \
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_main.c \
+	../../../../apps/zuupah_pen/examples/zuupah/ram_stubs.c \
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_ble.c \
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_spp.c \
 	../../../../apps/spp_and_le/config/lib_btctrler_config.c \
