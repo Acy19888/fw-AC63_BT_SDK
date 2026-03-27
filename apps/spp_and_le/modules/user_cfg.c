@@ -94,6 +94,9 @@ const struct btif_item btif_table[] = {
 };
 
 //============================= VM 区域空间最大值 ======================================//
+#ifndef VM_MAX_SIZE_CONFIG
+#define VM_MAX_SIZE_CONFIG  (16 * 1024)  /* default fallback, normally set via -D in Makefile */
+#endif
 const int vm_max_size_config = VM_MAX_SIZE_CONFIG; //该宏在app_cfg中配置
 //======================================================================================//
 
