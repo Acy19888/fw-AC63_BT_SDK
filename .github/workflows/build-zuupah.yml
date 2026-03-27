@@ -65,14 +65,27 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y make libssl-dev
 
-      # ── 6. Firmware kompilieren ───────────────────────────────────────────────
+      # ── 6. Firmware kompilieren + sdk.elf sofort sichern ────────────────────
       - name: Build Zuupah Firmware
         run: |
+          mkdir -p $GITHUB_WORKSPACE/firmware_output
+
           cd apps/zuupah_pen/board/br23
           ulimit -n 8096
           echo "Starte Build..."
           make VERBOSE=1 2>&1 | tee /tmp/build.log
           echo "Build exit code: $?"
+
+          # sdk.elf SOFORT sichern bevor host-client es löscht
+          # (OUT_ELF = ../../../../cpu/br23/tools/sdk.elf relativ zu board/br23)
+          ELF="../../../../cpu/br23/tools/sdk.elf"
+          if [ -f "$ELF" ]; then
+            cp "$ELF" $GITHUB_WORKSPACE/firmware_output/sdk.elf
+            echo "✓ sdk.elf gesichert: $(wc -c < $GITHUB_WORKSPACE/firmware_output/sdk.elf) bytes"
+          else
+            echo "✗ sdk.elf nicht gefunden nach make"
+            ls -la ../../../../cpu/br23/tools/*.elf 2>/dev/null || echo "keine .elf Dateien"
+          fi
 
       # ── 7. app.bin manuell aus sdk.elf erzeugen ───────────────────────────────
       - name: Generate app.bin from sdk.elf
@@ -98,17 +111,24 @@ jobs:
           echo "=== /opt/jieli/pi32v2/bin/ ==="
           ls /opt/jieli/pi32v2/bin/ 2>/dev/null | head -20 || echo "Ordner nicht gefunden"
 
+          # Wenn sdk.elf noch in cpu/br23/tools/ vorhanden, sonst aus firmware_output
+          if [ ! -f "$ELF" ] && [ -f "$GITHUB_WORKSPACE/firmware_output/sdk.elf" ]; then
+            ELF="$GITHUB_WORKSPACE/firmware_output/sdk.elf"
+            echo "Nutze gesichertes sdk.elf: $ELF"
+          fi
+
           if [ -f "$ELF" ] && [ -n "$OBJCOPY" ]; then
-            cd cpu/br23/tools
+            cd $(dirname $ELF)
 
             # Alle Sektionen extrahieren (gleich wie Windows download.bat)
-            $OBJCOPY -O binary -j .text        sdk.elf text.bin      2>/dev/null; [ -f text.bin ]      || touch text.bin
-            $OBJCOPY -O binary -j .data        sdk.elf data.bin      2>/dev/null; [ -f data.bin ]      || touch data.bin
-            $OBJCOPY -O binary -j .data_code   sdk.elf data_code.bin 2>/dev/null; [ -f data_code.bin ] || touch data_code.bin
-            $OBJCOPY -O binary -j .overlay_aec sdk.elf aec.bin       2>/dev/null; [ -f aec.bin ]       || touch aec.bin
-            $OBJCOPY -O binary -j .overlay_wav sdk.elf wav.bin       2>/dev/null; [ -f wav.bin ]       || touch wav.bin
-            $OBJCOPY -O binary -j .overlay_mp3 sdk.elf mp3.bin       2>/dev/null; [ -f mp3.bin ]       || touch mp3.bin
-            $OBJCOPY -O binary -j .overlay_wma sdk.elf wma.bin       2>/dev/null; [ -f wma.bin ]       || touch wma.bin
+            ELF_FILE=$(basename $ELF)
+            $OBJCOPY -O binary -j .text        $ELF_FILE text.bin      2>/dev/null; [ -f text.bin ]      || touch text.bin
+            $OBJCOPY -O binary -j .data        $ELF_FILE data.bin      2>/dev/null; [ -f data.bin ]      || touch data.bin
+            $OBJCOPY -O binary -j .data_code   $ELF_FILE data_code.bin 2>/dev/null; [ -f data_code.bin ] || touch data_code.bin
+            $OBJCOPY -O binary -j .overlay_aec $ELF_FILE aec.bin       2>/dev/null; [ -f aec.bin ]       || touch aec.bin
+            $OBJCOPY -O binary -j .overlay_wav $ELF_FILE wav.bin       2>/dev/null; [ -f wav.bin ]       || touch wav.bin
+            $OBJCOPY -O binary -j .overlay_mp3 $ELF_FILE mp3.bin       2>/dev/null; [ -f mp3.bin ]       || touch mp3.bin
+            $OBJCOPY -O binary -j .overlay_wma $ELF_FILE wma.bin       2>/dev/null; [ -f wma.bin ]       || touch wma.bin
 
             cat text.bin data.bin data_code.bin aec.bin wav.bin mp3.bin wma.bin > app.bin
             echo "✓ app.bin: $(wc -c < app.bin) bytes"
