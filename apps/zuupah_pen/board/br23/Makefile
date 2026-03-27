@@ -81,6 +81,7 @@ DEFINES := \
 	-DVFS_ENABLE=1 \
 	-DUSE_SDFILE_NEW=1 \
 	-DSDFILE_VERSION=0x020000 \
+	-DVM_MAX_SIZE_CONFIG=16*1024 \
 	-DCONFIG_SPP_AND_LE_CASE_ENABLE \
 	-DCONFIG_TRANSFER_ENABLE \
 	-DCONFIG_APP_ZUUPAH=1 \
@@ -119,6 +120,7 @@ INCLUDES := \
 	-I../../../../apps/spp_and_le/include \
 	-I../../../../apps/spp_and_le/board/br23 \
 	-I../../../../apps/common \
+	-I../../../../apps/common/audio \
 	-I../../../../apps/common/device \
 	-I../../../../apps/common/device/usb \
 	-I../../../../apps/common/include \
