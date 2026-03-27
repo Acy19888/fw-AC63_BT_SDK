@@ -14,7 +14,7 @@
 #include "system/includes.h"
 #include "app_config.h"
 #include "fs/fs.h"
-#include "adc/adc_api.h"     /* ADC für Batterie */
+#include "asm/adc_api.h"     /* ADC für Batterie */
 #include "string.h"
 
 #include "zuupah_ble.h"
@@ -45,7 +45,7 @@ static char g_current_book[64] = "";
 u8 zuupah_get_battery_percent(void)
 {
     /* ADC Kanal für Batteriespannung lesen */
-    u32 mv = adc_get_voltage(ADC_CHANNEL_VBAT);
+    u32 mv = adc_get_voltage(AD_CH_VBAT);
 
     /* Spannung in Prozent umrechnen (linear, LiPo) */
     if (mv >= BAT_FULL_MV)  return 100;
