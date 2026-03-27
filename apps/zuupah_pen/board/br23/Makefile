@@ -112,6 +112,7 @@ INCLUDES := \
 	-I../../../../apps/common/third_party_profile/jieli \
 	-I../../../../apps/common/third_party_profile/jieli/gatt_common \
 	-I../../../../apps/zuupah_pen/examples/zuupah \
+	-I../../../../apps/common/device/usb \
 	-I../../../../cpu/br23 \
 	-I$(SYS_INC_DIR) \
 
