@@ -1,0 +1,228 @@
+/**
+ * zuupah_main.c
+ * Haupt-Logik des Zuupah Pens
+ *
+ * Verwaltet:
+ *  - Batterie-Monitoring + BLE Notify
+ *  - Speicher-Monitoring
+ *  - Auto-Sleep nach 5 Minuten
+ *  - Audio-Wiedergabe
+ *  - BLE + SPP Initialisierung
+ */
+
+#include "system/app_core.h"
+#include "system/includes.h"
+#include "app_config.h"
+#include "fs/fs.h"
+#include "adc/adc_api.h"     /* ADC für Batterie */
+#include "string.h"
+
+#include "zuupah_ble.h"
+#include "zuupah_spp.h"
+#include "zuupah_ble_profile.h"
+
+#define LOG_TAG "[ZUUPAH]"
+#define log_info(x, ...) printf(LOG_TAG x "\n", ##__VA_ARGS__)
+
+/* ─── Konfiguration ──────────────────────────────────────────────────────────*/
+#define IDLE_TIMEOUT_SEC        (5 * 60)   /* 5 Minuten */
+#define SHUTDOWN_WARNING_SEC    60          /* 60 Sek Warnung vor Power-Off */
+#define BATTERY_CHECK_SEC       30          /* Batterie alle 30 Sek prüfen */
+#define STORAGE_CHECK_SEC       60          /* Speicher alle 60 Sek prüfen */
+#define BOOKS_DIR               "ZUUPAH/BOOKS/"
+
+/* Batterie-Spannungen in mV (für LiPo) */
+#define BAT_FULL_MV     4200
+#define BAT_EMPTY_MV    3300
+
+/* ─── State ──────────────────────────────────────────────────────────────────*/
+static u32  g_last_activity   = 0;
+static bool g_warning_sent    = false;
+static u32  g_warning_time    = 0;
+static char g_current_book[64] = "";
+
+/* ─── Batterie ───────────────────────────────────────────────────────────────*/
+u8 zuupah_get_battery_percent(void)
+{
+    /* ADC Kanal für Batteriespannung lesen */
+    u32 mv = adc_get_voltage(ADC_CHANNEL_VBAT);
+
+    /* Spannung in Prozent umrechnen (linear, LiPo) */
+    if (mv >= BAT_FULL_MV)  return 100;
+    if (mv <= BAT_EMPTY_MV) return 0;
+
+    return (u8)((mv - BAT_EMPTY_MV) * 100 / (BAT_FULL_MV - BAT_EMPTY_MV));
+}
+
+/* ─── Speicher ───────────────────────────────────────────────────────────────*/
+u32 zuupah_get_storage_total_mb(void)
+{
+    /* 8 GB Flash = 8192 MB */
+    return 8192;
+}
+
+u32 zuupah_get_storage_free_mb(void)
+{
+    /* Freie Sektoren vom Filesystem abfragen */
+    u32 free_sectors = fs_get_free_sectors();
+    u32 sector_size  = 512; /* Bytes */
+    return (free_sectors * sector_size) / (1024 * 1024);
+}
+
+/* ─── Aktuelles Buch ─────────────────────────────────────────────────────────*/
+const char* zuupah_get_current_book_id(void)
+{
+    if (g_current_book[0] == '\0') return NULL;
+    return g_current_book;
+}
+
+void zuupah_set_current_book(const char *book_id)
+{
+    strncpy(g_current_book, book_id ? book_id : "", sizeof(g_current_book) - 1);
+    zuupah_ble_notify_current_book(g_current_book);
+}
+
+/* ─── Aktivität zurücksetzen (bei Button, Audio-Start, SPP-Verbindung) ───────*/
+void zuupah_activity_reset(void)
+{
+    g_last_activity = sys_time_get_sec();
+    g_warning_sent  = false;
+    log_info("Aktivität erkannt, Sleep-Timer zurückgesetzt");
+}
+
+/* ─── Sounds abspielen ───────────────────────────────────────────────────────*/
+void zuupah_play_sound(const char *name)
+{
+    char path[128];
+    snprintf(path, sizeof(path), "ZUUPAH/SOUNDS/%s.mp3", name);
+    /* JieLi Audio API */
+    extern int music_dec_play_file(const char *path);
+    music_dec_play_file(path);
+}
+
+/* ─── Auto-Sleep Logik (läuft alle 1 Sekunde) ────────────────────────────────*/
+static void zuupah_sleep_tick(void)
+{
+    u32 now     = sys_time_get_sec();
+    u32 elapsed = now - g_last_activity;
+
+    /* 5 Minuten erreicht → Warnung */
+    if (!g_warning_sent && elapsed >= IDLE_TIMEOUT_SEC) {
+        log_info("Idle Timeout! Sende Shutdown-Warnung...");
+
+        zuupah_play_sound("shutdown_warning"); /* "Ich schalte mich in 60 Sekunden aus" */
+        zuupah_ble_notify_event(PEN_EVENT_SHUTDOWN_WARNING);
+
+        g_warning_sent = true;
+        g_warning_time = now;
+    }
+
+    /* 60 Sekunden nach Warnung → ausschalten */
+    if (g_warning_sent && (now - g_warning_time) >= SHUTDOWN_WARNING_SEC) {
+        log_info("Power Off!");
+
+        zuupah_play_sound("goodbye");
+        zuupah_ble_notify_event(PEN_EVENT_SHUTDOWN_NOW);
+
+        /* Kurz warten damit Audio + BLE Notify noch gesendet werden */
+        sys_time_delay_ms(2000);
+
+        /* JieLi Power-Off */
+        extern void power_off(void);
+        power_off();
+    }
+}
+
+/* ─── Batterie + Speicher periodisch melden ──────────────────────────────────*/
+static void zuupah_monitor_tick(void)
+{
+    static u32 bat_timer     = 0;
+    static u32 storage_timer = 0;
+    static u8  last_bat      = 255;
+
+    u32 now = sys_time_get_sec();
+
+    /* Batterie alle 30 Sek */
+    if (now - bat_timer >= BATTERY_CHECK_SEC) {
+        bat_timer = now;
+        u8 bat = zuupah_get_battery_percent();
+        if (bat != last_bat) {
+            zuupah_ble_notify_battery(bat);
+            last_bat = bat;
+            log_info("Batterie: %d%%", bat);
+
+            /* Warnung bei niedrigem Akkustand */
+            if (bat <= 10 && bat != 0) {
+                zuupah_play_sound("low_battery"); /* "Akku fast leer" */
+            } else if (bat == 0) {
+                zuupah_play_sound("battery_empty");
+                zuupah_ble_notify_event(PEN_EVENT_SHUTDOWN_NOW);
+                sys_time_delay_ms(2000);
+                extern void power_off(void);
+                power_off();
+            }
+        }
+    }
+
+    /* Speicher alle 60 Sek */
+    if (now - storage_timer >= STORAGE_CHECK_SEC) {
+        storage_timer = now;
+        zuupah_ble_notify_storage(
+            zuupah_get_storage_free_mb(),
+            zuupah_get_storage_total_mb()
+        );
+    }
+}
+
+/* ─── App Init ───────────────────────────────────────────────────────────────*/
+static int zuupah_app_init(void)
+{
+    log_info("=== Zuupah Pen Firmware v1.0 ===");
+
+    /* Ordnerstruktur erstellen */
+    fmkdir("ZUUPAH");
+    fmkdir("ZUUPAH/BOOKS");
+    fmkdir("ZUUPAH/SOUNDS");
+
+    /* BLE + SPP initialisieren */
+    zuupah_ble_init();
+    zuupah_spp_init();
+
+    /* Aktivitäts-Timer starten */
+    g_last_activity = sys_time_get_sec();
+
+    /* Startsound abspielen */
+    zuupah_play_sound("startup");  /* "Hallo! Zuupah Stift bereit" */
+
+    return 0;
+}
+
+/* ─── App Task Loop ──────────────────────────────────────────────────────────*/
+static void zuupah_app_task(void *p)
+{
+    zuupah_app_init();
+
+    while (1) {
+        /* Sleep-Logik */
+        zuupah_sleep_tick();
+
+        /* Batterie + Speicher überwachen */
+        zuupah_monitor_tick();
+
+        /* 1 Sekunde warten */
+        os_time_dly(100); /* JieLi: 100 ticks = 1 Sek (10ms/tick) */
+    }
+}
+
+/* ─── App Entry Point ────────────────────────────────────────────────────────*/
+APP_REGISTER(zuupah_app) = {
+    .name   = "zuupah",
+    .init   = zuupah_app_init,
+};
+
+/* Task starten */
+static void zuupah_task_start(void)
+{
+    task_create(zuupah_app_task, NULL, "zuupah_main");
+}
+SYS_CALL_REGISTER(zuupah_task_start, 10);

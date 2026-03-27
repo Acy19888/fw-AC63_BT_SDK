@@ -1,0 +1,130 @@
+name: Build Zuupah Pen Firmware
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'apps/zuupah_pen/**'
+      - '.github/workflows/build-zuupah.yml'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Manuell auslösen über GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Repository laden ──────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. JieLi Toolchain cachen (spart Zeit bei wiederholten Builds) ───────
+      - name: Cache JieLi Toolchain
+        id: cache-toolchain
+        uses: actions/cache@v4
+        with:
+          path: /opt/jieli
+          key: jieli-linux-toolchain-v1
+
+      # ── 3. JieLi Linux Toolchain herunterladen + installieren ────────────────
+      - name: Download & Install JieLi Toolchain
+        if: steps.cache-toolchain.outputs.cache-hit != 'true'
+        run: |
+          echo "Lade JieLi Linux Toolchain herunter..."
+          mkdir -p /opt/jieli
+          curl -L "https://pkgman.jieliapp.com/s/linux-toolchain" \
+            -o /tmp/jieli-toolchain.tar.gz \
+            --retry 3 \
+            --retry-delay 5 \
+            -#
+          echo "Entpacke Toolchain..."
+          tar -xf /tmp/jieli-toolchain.tar.gz -C /opt/jieli/ --strip-components=1 || \
+          tar -xf /tmp/jieli-toolchain.tar.gz -C /opt/jieli/
+          echo "Toolchain installiert!"
+          ls /opt/jieli/
+
+      # ── 4. Toolchain prüfen ───────────────────────────────────────────────────
+      - name: Verify Toolchain
+        run: |
+          # Clang finden (könnte in verschiedenen Unterordnern sein)
+          CLANG=$(find /opt/jieli -name "clang" -type f 2>/dev/null | head -1)
+          if [ -z "$CLANG" ]; then
+            echo "FEHLER: clang nicht gefunden!"
+            find /opt/jieli -type f | head -30
+            exit 1
+          fi
+          echo "Clang gefunden: $CLANG"
+          $CLANG --version
+          echo "TOOL_DIR=$(dirname $CLANG)" >> $GITHUB_ENV
+
+      # ── 5. Build-Abhängigkeiten ───────────────────────────────────────────────
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y make libssl-dev
+
+      # ── 6. Firmware kompilieren ───────────────────────────────────────────────
+      - name: Build Zuupah Firmware
+        run: |
+          cd apps/zuupah_pen/board/br23
+
+          # ulimit erhöhen (JieLi Linker braucht viele offene Dateien)
+          ulimit -n 8096
+
+          echo "Starte Build..."
+          make VERBOSE=1 2>&1 | tee /tmp/build.log
+
+          echo ""
+          echo "Build Status: $?"
+
+      # ── 7. Firmware-Datei finden ──────────────────────────────────────────────
+      - name: Find Firmware File
+        run: |
+          echo "Suche Firmware-Datei..."
+          find . -name "*.ufw" -o -name "*.bin" -o -name "sdk.elf" 2>/dev/null | head -10
+
+          # ufw Datei kopieren
+          UFW=$(find . -name "*.ufw" 2>/dev/null | head -1)
+          if [ -n "$UFW" ]; then
+            mkdir -p firmware_output
+            cp "$UFW" firmware_output/zuupah_pen_firmware.ufw
+            echo "✓ Firmware: $UFW"
+          else
+            # Fallback: ELF kopieren
+            ELF=$(find . -name "sdk.elf" 2>/dev/null | head -1)
+            if [ -n "$ELF" ]; then
+              mkdir -p firmware_output
+              cp "$ELF" firmware_output/zuupah_pen_firmware.elf
+              echo "✓ ELF: $ELF"
+            fi
+          fi
+
+      # ── 8. Build Log als Artifact hochladen ───────────────────────────────────
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          retention-days: 7
+
+      # ── 9. Firmware als Artifact hochladen ────────────────────────────────────
+      - name: Upload Firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: zuupah-pen-firmware
+          path: firmware_output/
+          retention-days: 30
+
+      # ── 10. Zusammenfassung ───────────────────────────────────────────────────
+      - name: Build Summary
+        if: success()
+        run: |
+          echo "## ✅ Zuupah Firmware Build erfolgreich!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Firmware-Dateien:**" >> $GITHUB_STEP_SUMMARY
+          ls -lh firmware_output/ >> $GITHUB_STEP_SUMMARY || echo "Keine Dateien" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Download:** Gehe zu Actions → Diesen Run → Artifacts → zuupah-pen-firmware" >> $GITHUB_STEP_SUMMARY
