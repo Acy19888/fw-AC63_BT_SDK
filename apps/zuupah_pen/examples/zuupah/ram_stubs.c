@@ -32,7 +32,16 @@ void p33_soft_reset(void)
      * in setup.c and will trigger a full system reset automatically. */
     while(1);
 }
-/* ── os_current_task indirect pointer ─────────────────────────────────────── */
+/* ── os_api.h indirect pointers ─────────────────────────────────────── */
 /* LTO otherwise truncates 23-bit jump from .text to .volatile_ram_code       */
 #undef os_current_task
+#undef os_taskq_post_type
+#undef os_mutex_create
+#undef os_mutex_pend
+#undef os_mutex_post
+
 const char * (* volatile os_current_task_ptr)(void) = os_current_task;
+int (* volatile os_taskq_post_type_ptr)(const char *, int, int, int *) = os_taskq_post_type;
+int (* volatile os_mutex_create_ptr)(OS_MUTEX *) = os_mutex_create;
+int (* volatile os_mutex_pend_ptr)(OS_MUTEX *, int) = os_mutex_pend;
+int (* volatile os_mutex_post_ptr)(OS_MUTEX *) = os_mutex_post;

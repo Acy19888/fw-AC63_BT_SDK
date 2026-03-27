@@ -195,6 +195,8 @@ int os_taskq_pend(const char *fmt, int *argv, int argc);
  */
 /* ----------------------------------------------------------------------------*/
 int os_taskq_post_type(const char *name, int type, int argc, int *argv);
+extern int (* volatile os_taskq_post_type_ptr)(const char *name, int type, int argc, int *argv);
+#define os_taskq_post_type(name, type, argc, argv) (os_taskq_post_type_ptr(name, type, argc, argv))
 
 
 /* --------------------------------------------------------------------------*/
@@ -346,6 +348,8 @@ int os_sem_query(OS_SEM *);
  */
 /* ----------------------------------------------------------------------------*/
 int os_mutex_create(OS_MUTEX *);
+extern int (* volatile os_mutex_create_ptr)(OS_MUTEX *);
+#define os_mutex_create(mutex) (os_mutex_create_ptr(mutex))
 
 /* --------------------------------------------------------------------------*/
 /**
@@ -369,6 +373,8 @@ int os_mutex_accept(OS_MUTEX *);
  */
 /* ----------------------------------------------------------------------------*/
 int os_mutex_pend(OS_MUTEX *, int timeout);
+extern int (* volatile os_mutex_pend_ptr)(OS_MUTEX *, int);
+#define os_mutex_pend(mutex, timeout) (os_mutex_pend_ptr(mutex, timeout))
 
 /* --------------------------------------------------------------------------*/
 /**
@@ -380,6 +386,8 @@ int os_mutex_pend(OS_MUTEX *, int timeout);
  */
 /* ----------------------------------------------------------------------------*/
 int os_mutex_post(OS_MUTEX *);
+extern int (* volatile os_mutex_post_ptr)(OS_MUTEX *);
+#define os_mutex_post(mutex) (os_mutex_post_ptr(mutex))
 
 /* --------------------------------------------------------------------------*/
 /**
