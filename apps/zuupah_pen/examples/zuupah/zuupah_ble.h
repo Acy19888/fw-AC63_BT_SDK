@@ -3,9 +3,6 @@
 
 #include "generic/typedef.h"
 
-/* BLE initialisieren und Advertising starten */
-void zuupah_ble_init(void);
-
 /* Werte an verbundene App senden (Notify) */
 void zuupah_ble_notify_battery(u8 percent);
 void zuupah_ble_notify_storage(u32 free_mb, u32 total_mb);

@@ -15,6 +15,9 @@
 #include "app_config.h"
 #include "fs/fs.h"
 #include "asm/adc_api.h"     /* ADC für Batterie */
+#include "asm/timer.h"       /* timer_get_sec(), delay_2ms() */
+#include "asm/power_interface.h" /* power_set_soft_poweroff() */
+#include "tone_player.h"     /* tone_play_by_path() */
 #include "string.h"
 #include "btstack/btstack_task.h"
 #include "bt_common.h"
@@ -65,10 +68,10 @@ u32 zuupah_get_storage_total_mb(void)
 
 u32 zuupah_get_storage_free_mb(void)
 {
-    /* Freie Sektoren vom Filesystem abfragen */
-    u32 free_sectors = fs_get_free_sectors();
-    u32 sector_size  = 512; /* Bytes */
-    return (free_sectors * sector_size) / (1024 * 1024);
+    /* Freien Speicher in Bytes abfragen und in MB umrechnen */
+    u32 free_bytes = 0;
+    fget_free_space("ZUUPAH", &free_bytes);
+    return free_bytes / (1024 * 1024);
 }
 
 /* ─── Aktuelles Buch ─────────────────────────────────────────────────────────*/
@@ -87,7 +90,7 @@ void zuupah_set_current_book(const char *book_id)
 /* ─── Aktivität zurücksetzen (bei Button, Audio-Start, SPP-Verbindung) ───────*/
 void zuupah_activity_reset(void)
 {
-    g_last_activity = sys_time_get_sec();
+    g_last_activity = timer_get_sec();
     g_warning_sent  = false;
     log_info("Aktivität erkannt, Sleep-Timer zurückgesetzt");
 }
@@ -96,16 +99,15 @@ void zuupah_activity_reset(void)
 void zuupah_play_sound(const char *name)
 {
     char path[128];
-    snprintf(path, sizeof(path), "ZUUPAH/SOUNDS/%s.mp3", name);
-    /* JieLi Audio API */
-    extern int music_dec_play_file(const char *path);
-    music_dec_play_file(path);
+    /* Wildcard-Erweiterung damit tone_play_by_path MP3/WAV findet */
+    snprintf(path, sizeof(path), "ZUUPAH/SOUNDS/%s.*", name);
+    tone_play_by_path(path, 1);
 }
 
 /* ─── Auto-Sleep Logik (läuft alle 1 Sekunde) ────────────────────────────────*/
 static void zuupah_sleep_tick(void)
 {
-    u32 now     = sys_time_get_sec();
+    u32 now     = timer_get_sec();
     u32 elapsed = now - g_last_activity;
 
     /* 5 Minuten erreicht → Warnung */
@@ -126,12 +128,11 @@ static void zuupah_sleep_tick(void)
         zuupah_play_sound("goodbye");
         zuupah_ble_notify_event(PEN_EVENT_SHUTDOWN_NOW);
 
-        /* Kurz warten damit Audio + BLE Notify noch gesendet werden */
-        sys_time_delay_ms(2000);
+        /* Kurz warten damit Audio + BLE Notify noch gesendet werden (1000 * 2ms = 2s) */
+        delay_2ms(1000);
 
         /* JieLi Power-Off */
-        extern void power_off(void);
-        power_off();
+        power_set_soft_poweroff();
     }
 }
 
@@ -142,7 +143,7 @@ static void zuupah_monitor_tick(void)
     static u32 storage_timer = 0;
     static u8  last_bat      = 255;
 
-    u32 now = sys_time_get_sec();
+    u32 now = timer_get_sec();
 
     /* Batterie alle 30 Sek */
     if (now - bat_timer >= BATTERY_CHECK_SEC) {
@@ -159,9 +160,8 @@ static void zuupah_monitor_tick(void)
             } else if (bat == 0) {
                 zuupah_play_sound("battery_empty");
                 zuupah_ble_notify_event(PEN_EVENT_SHUTDOWN_NOW);
-                sys_time_delay_ms(2000);
-                extern void power_off(void);
-                power_off();
+                delay_2ms(1000);
+                power_set_soft_poweroff();
             }
         }
     }
@@ -199,7 +199,7 @@ static int zuupah_app_init(void)
     zuupah_spp_init();
 
     /* Aktivitäts-Timer starten */
-    g_last_activity = sys_time_get_sec();
+    g_last_activity = timer_get_sec();
 
     /* Startsound abspielen */
     zuupah_play_sound("startup");  /* "Hallo! Zuupah Stift bereit" */
