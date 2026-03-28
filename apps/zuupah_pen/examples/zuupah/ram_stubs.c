@@ -285,6 +285,12 @@ void port_protect(u16 *port_group, u32 port_num)
  * TCFG_AUDIO_ENABLE is defined.  Stub prevents Flash→RAM overflow.        */
 void dac_power_off(void) {}
 
+/* norflash_ioctl — generic SFC/VM flash ioctl (vm_sfc.c, cpu.a LTO .text).
+ * Internally calls read_flash_id which is STATIC in .volatile_ram_code (RAM).
+ * Flash→RAM 23-bit jump overflows.  The pen never issues raw flash ioctls at
+ * runtime, so a no-op stub is safe.                                        */
+int norflash_ioctl(u32 cmd, u32 arg) { (void)cmd; (void)arg; return 0; }
+
 /* norflash_set_write_protect — controls flash WP pin / status register.
  * Defined in flash_wp_otp.c (cpu.a LTO bitcode, lands in .text = Flash).
  * Internally calls flash_addr2cpu_addr which is STATIC in .volatile_ram_code
