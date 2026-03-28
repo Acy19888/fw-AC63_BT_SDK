@@ -9,6 +9,7 @@ on:
       - 'cpu/br23/**'
       - 'include_lib/**'
       - '.github/workflows/build-zuupah.yml'
+      - '.github/scripts/**'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:  # Manuell auslösen über GitHub UI
