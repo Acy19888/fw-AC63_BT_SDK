@@ -66,7 +66,99 @@ jobs:
       - name: Install Build Dependencies
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y make libssl-dev
+          sudo apt-get install -y make libssl-dev llvm-14
+
+      # ── 5.5. Patch power_hw.c.o — fix delay_nus section attribute ────────────
+      # LTO promotes static delay_nus (pmu_analog.c) to delay_nus.636 with no
+      # section attribute → lands in .text (Flash). ldo13_on in .volatile_ram_code
+      # (RAM) tries to call it via 23-bit PI32V2 jump → truncated relocation.
+      # Fix: add section ".volatile_ram_code" to delay_nus in the LLVM IR bitcode
+      # before linking, so delay_nus.636 ends up in RAM alongside ldo13_on.
+      - name: Patch cpu.a - fix delay_nus section attribute
+        run: |
+          set -e
+          TOOLDIR=$(find /opt/jieli -name "clang" -type f 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo "")
+          echo "JieLi tool dir: $TOOLDIR"
+          ls "$TOOLDIR/" 2>/dev/null | grep -i "llvm\|dis\|as$" | head -20 || true
+
+          CPU_A="cpu/br23/liba/cpu.a"
+          WORK="/tmp/bitcode_patch"
+          mkdir -p "$WORK"
+          cp "$CPU_A" "$WORK/cpu.a"
+          cd "$WORK"
+          ar x cpu.a power_hw.c.o
+          echo "Extracted power_hw.c.o: $(wc -c < power_hw.c.o) bytes"
+          file power_hw.c.o
+
+          # Find llvm-dis: prefer JieLi's, fall back to Ubuntu's llvm-14
+          LLVMDIS=""
+          LLVMAS=""
+          for dis in "$TOOLDIR/llvm-dis" llvm-dis-14 llvm-dis; do
+            if command -v "$dis" >/dev/null 2>&1 || [ -f "$dis" ]; then
+              LLVMDIS="$dis"
+              LLVMAS="${dis/dis/as}"
+              echo "Using: $LLVMDIS"
+              break
+            fi
+          done
+
+          if [ -z "$LLVMDIS" ]; then
+            echo "No llvm-dis found — cannot patch (build will attempt unpatched)"
+            exit 0
+          fi
+
+          # Decompile bitcode to LLVM IR text
+          "$LLVMDIS" power_hw.c.o -o power_hw.ll 2>&1 || {
+            echo "llvm-dis failed (version incompatibility?) — trying with --disable-output check"
+            exit 0
+          }
+          echo "Decompiled OK, $(wc -l < power_hw.ll) lines"
+          grep -n "delay_nus" power_hw.ll | head -10
+
+          # Patch: add section ".volatile_ram_code" to delay_nus definition
+          python3 - <<'PYEOF'
+import re, sys
+
+with open('power_hw.ll', 'r') as f:
+    content = f.read()
+
+orig = content
+
+# LLVM IR function def pattern:
+#   define [linkage] [type] @delay_nus(params) [attrs] {
+# We need to insert: section ".volatile_ram_code"
+# BEFORE the opening brace (if not already present)
+pattern = r'(define\b[^@]*@delay_nus\s*\([^)]*\)(?:\s+(?!section)[^\s{]+)*)'
+def add_section(m):
+    s = m.group(0)
+    if 'section' not in s:
+        s = s.rstrip() + ' section ".volatile_ram_code"'
+    return s
+
+content, n = re.subn(pattern, add_section, content, flags=re.MULTILINE)
+if n > 0:
+    print(f"Patched {n} delay_nus definition(s)")
+    with open('power_hw.ll', 'w') as f:
+        f.write(content)
+else:
+    print("No delay_nus definition found — showing all delay_nus lines:")
+    for line in orig.split('\n'):
+        if 'delay_nus' in line:
+            print(f"  {line[:120]}")
+    sys.exit(1)
+PYEOF
+
+          # Reassemble patched IR back to bitcode
+          "$LLVMAS" power_hw.ll -o power_hw_patched.c.o 2>&1 || {
+            echo "llvm-as failed — skipping patch"
+            exit 0
+          }
+          echo "Reassembled patched bitcode: $(wc -c < power_hw_patched.c.o) bytes"
+
+          # Replace in archive
+          cp cpu.a "$GITHUB_WORKSPACE/$CPU_A"
+          ar r "$GITHUB_WORKSPACE/$CPU_A" power_hw_patched.c.o
+          echo "✓ Updated $CPU_A with patched power_hw.c.o (delay_nus now in .volatile_ram_code)"
 
       # ── 6. Firmware kompilieren + sdk.elf sofort sichern ────────────────────
       - name: Build Zuupah Firmware
