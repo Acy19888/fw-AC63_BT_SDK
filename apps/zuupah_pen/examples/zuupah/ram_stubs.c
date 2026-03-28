@@ -166,7 +166,7 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
-AT_VOLATILE_RAM_CODE
+AT_VOLATILE_RAM_CODE __attribute__((noinline))
 void delay_nus(unsigned int nus) {
     /* Rough NOP delay loop for microsecond waits */
     unsigned int loops = nus * 12;
