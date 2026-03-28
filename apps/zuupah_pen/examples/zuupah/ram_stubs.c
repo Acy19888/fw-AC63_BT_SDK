@@ -47,20 +47,31 @@ int (* volatile os_mutex_create_ptr)(OS_MUTEX *) = os_mutex_create;
 int (* volatile os_mutex_pend_ptr)(OS_MUTEX *, int) = os_mutex_pend;
 int (* volatile os_mutex_post_ptr)(OS_MUTEX *) = os_mutex_post;
 
-/* ── p33.h indirect pointers ──────────────────────────────────────────────── */
-/* LTO otherwise truncates 23-bit jumps from P33 inline functions in .text    */
-#undef p33_buf
-#undef p33_xor_1byte
-#undef p33_and_1byte
-#undef p33_or_1byte
-#undef p33_tx_1byte
-#undef p33_rx_1byte
-#undef P33_CON_SET
+/* ── LTO --wrap trampolines for p33 (ROM) functions ───────────────────── */
+/* Precompiled LLVM IR in cpu.a contains direct calls to p33_or_1byte etc.*/
+/* LTO fails the 23-bit jump check. Using --wrap=... in Makefile we catch */
+/* these calls in .text and indirectly call the __real_ ROM functions.    */
 
-u8 (* volatile p33_buf_ptr)(u8) = p33_buf;
-void (* volatile p33_xor_1byte_ptr)(u16, u8) = p33_xor_1byte;
-void (* volatile p33_and_1byte_ptr)(u16, u8) = p33_and_1byte;
-void (* volatile p33_or_1byte_ptr)(u16, u8) = p33_or_1byte;
-void (* volatile p33_tx_1byte_ptr)(u16, u8) = p33_tx_1byte;
-u8 (* volatile p33_rx_1byte_ptr)(u16) = p33_rx_1byte;
-void (* volatile P33_CON_SET_ptr)(u16, u8, u8, u8) = P33_CON_SET;
+extern u8 __real_p33_buf(u8);
+extern void __real_p33_xor_1byte(u16, u8);
+extern void __real_p33_and_1byte(u16, u8);
+extern void __real_p33_or_1byte(u16, u8);
+extern void __real_p33_tx_1byte(u16, u8);
+extern u8 __real_p33_rx_1byte(u16);
+extern void __real_P33_CON_SET(u16, u8, u8, u8);
+
+u8 (* volatile __real_p33_buf_ptr)(u8) = __real_p33_buf;
+void (* volatile __real_p33_xor_1byte_ptr)(u16, u8) = __real_p33_xor_1byte;
+void (* volatile __real_p33_and_1byte_ptr)(u16, u8) = __real_p33_and_1byte;
+void (* volatile __real_p33_or_1byte_ptr)(u16, u8) = __real_p33_or_1byte;
+void (* volatile __real_p33_tx_1byte_ptr)(u16, u8) = __real_p33_tx_1byte;
+u8 (* volatile __real_p33_rx_1byte_ptr)(u16) = __real_p33_rx_1byte;
+void (* volatile __real_P33_CON_SET_ptr)(u16, u8, u8, u8) = __real_P33_CON_SET;
+
+u8 __wrap_p33_buf(u8 buf) { return __real_p33_buf_ptr(buf); }
+void __wrap_p33_xor_1byte(u16 addr, u8 data0) { __real_p33_xor_1byte_ptr(addr, data0); }
+void __wrap_p33_and_1byte(u16 addr, u8 data0) { __real_p33_and_1byte_ptr(addr, data0); }
+void __wrap_p33_or_1byte(u16 addr, u8 data0) { __real_p33_or_1byte_ptr(addr, data0); }
+void __wrap_p33_tx_1byte(u16 addr, u8 data0) { __real_p33_tx_1byte_ptr(addr, data0); }
+u8 __wrap_p33_rx_1byte(u16 addr) { return __real_p33_rx_1byte_ptr(addr); }
+void __wrap_P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) { __real_P33_CON_SET_ptr(addr, start, len, data); }

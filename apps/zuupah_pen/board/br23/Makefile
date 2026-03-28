@@ -182,6 +182,13 @@ LFLAGS := \
 	--sort-common \
 	--gc-sections \
 	--allow-multiple-definition \
+	--wrap=p33_buf \
+	--wrap=p33_xor_1byte \
+	--wrap=p33_and_1byte \
+	--wrap=p33_or_1byte \
+	--wrap=p33_tx_1byte \
+	--wrap=p33_rx_1byte \
+	--wrap=P33_CON_SET \
 	--start-group \
 	../../../../cpu/br23/liba/cpu.a \
 	../../../../cpu/br23/liba/system.a \

@@ -283,32 +283,18 @@ enum {
 
 //ROM
 u8 p33_buf(u8 buf);
-extern u8 (* volatile p33_buf_ptr)(u8);
-#define p33_buf(buf) (p33_buf_ptr(buf))
 
 void p33_xor_1byte(u16 addr, u8 data0);
-extern void (* volatile p33_xor_1byte_ptr)(u16, u8);
-#define p33_xor_1byte(addr, data0) (p33_xor_1byte_ptr(addr, data0))
 
 void p33_and_1byte(u16 addr, u8 data0);
-extern void (* volatile p33_and_1byte_ptr)(u16, u8);
-#define p33_and_1byte(addr, data0) (p33_and_1byte_ptr(addr, data0))
 
 void p33_or_1byte(u16 addr, u8 data0);
-extern void (* volatile p33_or_1byte_ptr)(u16, u8);
-#define p33_or_1byte(addr, data0) (p33_or_1byte_ptr(addr, data0))
 
 void p33_tx_1byte(u16 addr, u8 data0);
-extern void (* volatile p33_tx_1byte_ptr)(u16, u8);
-#define p33_tx_1byte(addr, data0) (p33_tx_1byte_ptr(addr, data0))
 
 u8 p33_rx_1byte(u16 addr);
-extern u8 (* volatile p33_rx_1byte_ptr)(u16);
-#define p33_rx_1byte(addr) (p33_rx_1byte_ptr(addr))
 
 void P33_CON_SET(u16 addr, u8 start, u8 len, u8 data);
-extern void (* volatile P33_CON_SET_ptr)(u16, u8, u8, u8);
-#define P33_CON_SET(addr, start, len, data) (P33_CON_SET_ptr(addr, start, len, data))
 
 void SET_WVDD_LEV(u8 lev);
 
