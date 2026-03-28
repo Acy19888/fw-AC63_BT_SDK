@@ -190,14 +190,23 @@ void delay_nus(unsigned int nus) {
 /* static delay_nus that LTO promotes to delay_nus.636 and places in     */
 /* .text (Flash).  The resulting RAM→Flash 23-bit jump fails.            */
 /*                                                                         */
-/* Our override calls:                                                     */
+/* --allow-multiple-definition alone is insufficient for LTO bitcode:    */
+/* lto-wrapper merges all IR first, so the library's ldo13_on body       */
+/* (referencing delay_nus.636) is still compiled even when discarded      */
+/* at symbol level.                                                        */
+/*                                                                         */
+/* Fix: --wrap=ldo13_on redirects all external calls to __wrap_ldo13_on  */
+/* (this function, in RAM).  The library's ldo13_on becomes unreferenced  */
+/* and is eliminated by --gc-sections together with -ffunction-sections.  */
+/*                                                                         */
+/* __wrap_ldo13_on calls:                                                  */
 /*   p33_or_1byte ROM (0x1111a6) via function pointer — absolute 32-bit  */
 /*   delay_nus (above, also RAM) — RAM→RAM, always in range               */
 /*                                                                         */
 /* LDO13_EN(1) = P33_TX_NBIT(P3_ANA_CON0, BIT(2), 1)                    */
 /*             = p33_or_1byte(0x00, 0x04)                                 */
 AT_VOLATILE_RAM_CODE __attribute__((noinline))
-void ldo13_on(unsigned int udelay) {
+void __wrap_ldo13_on(unsigned int udelay) {
     void (* volatile fn)(unsigned short, unsigned char) =
         (void (* volatile)(unsigned short, unsigned char))0x1111a6; /* p33_or_1byte ROM */
     fn(0x00u, 0x04u);   /* set BIT(2) of P3_ANA_CON0 = enable LDO13 */

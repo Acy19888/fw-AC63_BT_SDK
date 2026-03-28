@@ -66,6 +66,7 @@ CFLAGS := \
 	-fallow-pointer-null \
 	-fprefer-gnu-section \
 	-fms-extensions \
+	-ffunction-sections \
 	-w \
 
 # ─── Defines ─────────────────────────────────────────────────────────────────
@@ -183,6 +184,7 @@ LFLAGS := \
 	--sort-common \
 	--gc-sections \
 	--allow-multiple-definition \
+	--wrap=ldo13_on \
 	--start-group \
 	../../../../cpu/br23/liba/cpu.a \
 	../../../../cpu/br23/liba/system.a \
