@@ -271,7 +271,10 @@ static void zuupah_spp_receive_cbk(void *priv, u8 *data, u16 len)
             snprintf(meta, sizeof(meta), "%s%s.meta", BOOKS_DIR, g_filename);
             FILE *mf = fopen(meta, "w");
             if (mf) {
-                fprintf(mf, "file=%s\n", g_filename);
+                /* fprintf not in JieLi libc — format first, then fwrite */
+                char fbuf[256];
+                int flen = snprintf(fbuf, sizeof(fbuf), "file=%s\n", g_filename);
+                if (flen > 0) { fwrite(fbuf, 1, (size_t)flen, mf); }
                 fclose(mf);
             }
 
