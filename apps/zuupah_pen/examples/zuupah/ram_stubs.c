@@ -88,3 +88,46 @@ void P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) {
     void (* volatile real_func)(u16, u8, u8, u8) = (void (* volatile)(u16, u8, u8, u8))0x112418;
     real_func(addr, start, len, data);
 }
+
+/* ── LTO C-trampolines for GPIO (RAM) functions ───────────────────────── */
+/* Precompiled LLVM IR in cpu.a/system.a contains direct calls to gpio_   */
+/* Since these functions reside in .volatile_ram_code, jumping to them    */
+/* from .text exceeds 23 bits. We override them and use their __gpio_     */
+/* internal aliases via 32-bit volatile pointers.                         */
+
+#include "generic/gpio.h"
+
+int gpio_direction_input(unsigned int gpio) {
+    int (* volatile real_func)(unsigned int) = __gpio_direction_input;
+    return real_func(gpio);
+}
+
+int gpio_direction_output(unsigned int gpio, int value) {
+    int (* volatile real_func)(unsigned int, int) = __gpio_direction_output;
+    return real_func(gpio, value);
+}
+
+int gpio_set_pull_up(unsigned int gpio, int value) {
+    int (* volatile real_func)(unsigned int, int) = __gpio_set_pull_up;
+    return real_func(gpio, value);
+}
+
+int gpio_set_pull_down(unsigned int gpio, int value) {
+    int (* volatile real_func)(unsigned int, int) = __gpio_set_pull_down;
+    return real_func(gpio, value);
+}
+
+int gpio_set_hd(unsigned int gpio, int value) {
+    int (* volatile real_func)(unsigned int, int) = __gpio_set_hd;
+    return real_func(gpio, value);
+}
+
+int gpio_set_die(unsigned int gpio, int value) {
+    int (* volatile real_func)(unsigned int, int) = __gpio_set_die;
+    return real_func(gpio, value);
+}
+
+int gpio_read(unsigned int gpio) {
+    int (* volatile real_func)(unsigned int) = __gpio_read;
+    return real_func(gpio);
+}
