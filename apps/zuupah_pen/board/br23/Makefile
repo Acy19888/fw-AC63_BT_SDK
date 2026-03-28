@@ -28,25 +28,36 @@ FIXBAT          := ..\..\..\..\tools\utils\fixbat.exe
 POST_SCRIPT     := ../../../../cpu/br23/tools/download.bat
 RUN_POST_SCRIPT := ..\..\..\..\cpu\br23\tools\download.bat
 else
-TOOL_DIR        := /opt/jieli/pi32v2/bin
+# ── JieLi Linux Toolchain: unterstütze beide Layouts ──────────────────────
+# Altes Layout (v1):  alle Tools in /opt/jieli/pi32v2/bin/
+# Neues Layout (v2):  LLVM-Frontend in /opt/jieli/common/bin/,
+#                     Target-Linker in /opt/jieli/pi32v2/bin/
+ifneq ($(wildcard /opt/jieli/common/bin/clang),)
+  # Neues Layout: Compiler + LLVM-Tools in common/bin
+  TOOL_DIR      := /opt/jieli/common/bin
+else
+  # Altes Layout: alle Tools in pi32v2/bin
+  TOOL_DIR      := /opt/jieli/pi32v2/bin
+endif
+# Target-Bibliotheken und Includes liegen immer in pi32v2/
+SYS_LIB_DIR    := /opt/jieli/pi32v2/lib/r3
+SYS_INC_DIR    := /opt/jieli/pi32v2/include
 CC              := clang
 LD              := lto-wrapper
 AR              := lto-ar
 MKDIR           := mkdir -p
 RM              := rm -rf
-export OBJDUMP  := $(TOOL_DIR)/objdump
-export OBJCOPY  := $(TOOL_DIR)/objcopy
-SYS_LIB_DIR     := $(TOOL_DIR)/../lib/r3
-SYS_INC_DIR     := $(TOOL_DIR)/../include
-EXT_CFLAGS      := -D__SHELL__
-export PATH     := $(TOOL_DIR):$(PATH)
+export OBJDUMP     := $(TOOL_DIR)/objdump
+export OBJCOPY     := $(TOOL_DIR)/objcopy
 export OBJSIZEDUMP := $(TOOL_DIR)/objsizedump
-FIXBAT          := touch
-POST_SCRIPT     := ../../../../cpu/br23/tools/download.sh
+EXT_CFLAGS         := -D__SHELL__
+export PATH        := $(TOOL_DIR):/opt/jieli/pi32v2/bin:$(PATH)
+FIXBAT             := touch
+POST_SCRIPT        := ../../../../cpu/br23/tools/download.sh
 # cd to tools/ first so download.sh finds sdk.elf and can write output files.
-# Use '-' prefix (or || true) so post-script failure does NOT abort the build
+# Use '-' prefix so post-script failure does NOT abort the build
 # — app.bin is already created by the inline objcopy/cat commands above.
-TOOLS_DIR_ABS   := $(abspath ../../../../cpu/br23/tools)
+TOOLS_DIR_ABS  := $(abspath ../../../../cpu/br23/tools)
 RUN_POST_SCRIPT := cd $(TOOLS_DIR_ABS) && bash download.sh
 endif
 
