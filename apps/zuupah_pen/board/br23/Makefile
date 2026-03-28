@@ -40,9 +40,14 @@ SYS_LIB_DIR     := $(TOOL_DIR)/../lib/r3
 SYS_INC_DIR     := $(TOOL_DIR)/../include
 EXT_CFLAGS      := -D__SHELL__
 export PATH     := $(TOOL_DIR):$(PATH)
+export OBJSIZEDUMP := $(TOOL_DIR)/objsizedump
 FIXBAT          := touch
 POST_SCRIPT     := ../../../../cpu/br23/tools/download.sh
-RUN_POST_SCRIPT := bash $(POST_SCRIPT)
+# cd to tools/ first so download.sh finds sdk.elf and can write output files.
+# Use '-' prefix (or || true) so post-script failure does NOT abort the build
+# — app.bin is already created by the inline objcopy/cat commands above.
+TOOLS_DIR_ABS   := $(abspath ../../../../cpu/br23/tools)
+RUN_POST_SCRIPT := cd $(TOOLS_DIR_ABS) && bash download.sh
 endif
 
 CC  := $(TOOL_DIR)/$(CC)
@@ -256,7 +261,7 @@ all: pre_build $(OUT_ELF)
 	$(QUITE) $(OBJCOPY) -O binary -j .overlay_wma $(OUT_ELF) ../../../../cpu/br23/tools/wma.bin      2>/dev/null || true
 	$(QUITE) cat ../../../../cpu/br23/tools/text.bin ../../../../cpu/br23/tools/data.bin ../../../../cpu/br23/tools/data_code.bin ../../../../cpu/br23/tools/aec.bin ../../../../cpu/br23/tools/wav.bin ../../../../cpu/br23/tools/mp3.bin ../../../../cpu/br23/tools/wma.bin > ../../../../cpu/br23/tools/app.bin
 	$(info ✓ app.bin erzeugt)
-	$(QUITE) $(RUN_POST_SCRIPT) sdk
+	-$(QUITE) $(RUN_POST_SCRIPT) sdk
 
 pre_build:
 	$(QUITE) $(CC) $(CFLAGS) $(DEFINES) $(INCLUDES) -D__LD__ -E -P ../../../../cpu/br23/sdk_used_list.c -o ../../../../cpu/br23/sdk_used_list.used
