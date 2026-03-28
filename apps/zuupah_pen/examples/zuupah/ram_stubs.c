@@ -171,33 +171,9 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
-/* ── ldo13_on — override the library version with a RAM-resident copy ─── */
-/* JieLi LTO strips .volatile_ram_code from PUBLIC (extern) symbols during  */
-/* native code generation: ldo13_on lands in .text (Flash) even though its  */
-/* bitcode has the section attribute.  Its static delay_nus helper stays in  */
-/* RAM (internal symbols keep the attribute), producing a Flash→RAM 23-bit   */
-/* overflow.                                                                  */
-/*                                                                            */
-/* Fix: define ldo13_on ourselves in this non-LTO translation unit           */
-/* (ram_stubs.c is compiled with -fno-lto).  The section attribute is        */
-/* honoured by the regular compiler, so the function is placed in            */
-/* .volatile_ram_code (RAM).  --allow-multiple-definition makes our copy win */
-/* over the library version.  The inline busy-wait avoids any call to the    */
-/* library's private delay_nus (unreachable from outside the LTO blob).      */
-/*                                                                            */
-/* LDO13_EN(1) = P33_TX_NBIT(P3_ANA_CON0, BIT(2), 1)                        */
-/*             = p33_or_1byte(0x00, 0x04)  [ROM at 0x1111a6]                 */
-AT_VOLATILE_RAM_CODE __attribute__((noinline))
-void ldo13_on(unsigned int udelay)
-{
-    /* Call p33_or_1byte from ROM (always reachable, even when Flash is off) */
-    void (* volatile fn)(unsigned short, unsigned char) =
-        (void (* volatile)(unsigned short, unsigned char))0x1111a6u;
-    fn(0x00u, 0x04u);   /* set P3_ANA_CON0 bit 2 → enable LDO13 */
-
-    if (udelay) {
-        /* Inline busy-wait: no external call across the RAM/Flash boundary. */
-        volatile unsigned int loops = udelay * 12u;
-        while (loops--) { __asm__ volatile("nop"); }
-    }
-}
+/* ldo13_on is provided by the cpu.a LTO blob (pmu_analog.c).
+ * The linker script (sdk_ld.c) uses EXCLUDE_FILE(*lto-llvm-*) on
+ * .volatile_ram_code so that delay_nus (a STATIC helper of ldo13_on that
+ * LTO keeps in .volatile_ram_code) is placed as an orphan in Flash alongside
+ * ldo13_on (which LTO puts in .text/Flash).  Both end up in Flash, so the
+ * 23-bit PI32V2 relocation is within range.  No override needed here. */

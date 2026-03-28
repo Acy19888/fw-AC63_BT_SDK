@@ -301,7 +301,14 @@ SECTIONS
         . = ALIGN(4);
 
         *(.flushinv_icache)
-        *(.volatile_ram_code)
+        /* Keep non-LTO .volatile_ram_code in RAM (startup.S, ram_stubs.c, etc.).
+         * EXCLUDE the LTO output (*lto-llvm-*) because JieLi LTO strips the
+         * section attribute from PUBLIC symbols: ldo13_on lands in .text (Flash)
+         * but its STATIC helper delay_nus keeps .volatile_ram_code (RAM) →
+         * Flash→RAM 23-bit jump overflow.  By excluding the LTO blob here,
+         * delay_nus becomes an orphan section placed by the linker in Flash,
+         * alongside ldo13_on — the relocation stays within the 23-bit range. */
+        *(EXCLUDE_FILE(*lto-llvm-*) .volatile_ram_code)
 
 
         *(.chargebox_code)
