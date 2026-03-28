@@ -171,11 +171,12 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
-/* ── delay_nus — RAM-resident microsecond delay ──────────────────────── */
-/* Keep in .volatile_ram_code so any RAM caller can reach it without a   */
-/* cross-section 23-bit jump. __attribute__((noinline)) prevents LTO     */
-/* from cloning it into a .text variant.                                  */
-AT_VOLATILE_RAM_CODE __attribute__((noinline))
+/* ── delay_nus — Flash-resident microsecond delay ────────────────────── */
+/* ldo13_on / __real_ldo13_on lands in .text (Flash) after --wrap renames */
+/* it. Both the library's internal delay_nus and our external one must    */
+/* therefore be in Flash too — a Flash→RAM 23-bit jump would overflow.   */
+/* __wrap_ldo13_on (RAM) uses an inline loop instead of calling here.     */
+__attribute__((noinline))
 void delay_nus(unsigned int nus) {
     unsigned int loops = nus * 12;
     while (loops--) {
@@ -184,31 +185,21 @@ void delay_nus(unsigned int nus) {
 }
 
 /* ── ldo13_on — RAM-resident LDO 1.3 V enable ────────────────────────── */
-/* The library version (in pmu_analog.c / .volatile_ram_code) calls a    */
-/* static delay_nus that LTO promotes to delay_nus.636 and places in     */
-/* .text (Flash).  The resulting RAM→Flash 23-bit jump fails.            */
-/*                                                                         */
-/* --allow-multiple-definition alone is insufficient for LTO bitcode:    */
-/* lto-wrapper merges all IR first, so the library's ldo13_on body       */
-/* (referencing delay_nus.636) is still compiled even when discarded      */
-/* at symbol level.                                                        */
-/*                                                                         */
-/* Fix: --wrap=ldo13_on redirects all external calls to __wrap_ldo13_on  */
-/* (this function, in RAM).  The library's ldo13_on becomes unreferenced  */
-/* and is eliminated by --gc-sections together with -ffunction-sections.  */
-/*                                                                         */
-/* __wrap_ldo13_on calls:                                                  */
-/*   p33_or_1byte ROM (0x1111a6) via function pointer — absolute 32-bit  */
-/*   delay_nus (above, also RAM) — RAM→RAM, always in range               */
+/* --wrap=ldo13_on redirects all external calls here.  __wrap_ldo13_on   */
+/* must stay in .volatile_ram_code (RAM).  It cannot call delay_nus      */
+/* (Flash) from RAM — that is a RAM→Flash 23-bit jump and also overflows. */
+/* Solution: inline the busy-wait loop directly without a function call.  */
 /*                                                                         */
 /* LDO13_EN(1) = P33_TX_NBIT(P3_ANA_CON0, BIT(2), 1)                    */
-/*             = p33_or_1byte(0x00, 0x04)                                 */
+/*             = p33_or_1byte(0x00, 0x04)  [ROM at 0x1111a6]             */
 AT_VOLATILE_RAM_CODE __attribute__((noinline))
 void __wrap_ldo13_on(unsigned int udelay) {
     void (* volatile fn)(unsigned short, unsigned char) =
         (void (* volatile)(unsigned short, unsigned char))0x1111a6; /* p33_or_1byte ROM */
     fn(0x00u, 0x04u);   /* set BIT(2) of P3_ANA_CON0 = enable LDO13 */
     if (udelay) {
-        delay_nus(udelay);
+        /* Inline busy-wait — avoids a RAM→Flash cross-boundary call. */
+        volatile unsigned int loops = udelay * 12;
+        while (loops--) { __asm__ volatile ("nop"); }
     }
 }

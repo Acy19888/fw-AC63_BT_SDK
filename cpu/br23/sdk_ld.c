@@ -302,10 +302,8 @@ SECTIONS
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
-        /* ram_stubs.c compiles delay_nus with -fno-lto → native .text.delay_nus
-         * section → placed here in RAM.  delay_nus.636 (LTO-promoted static from
-         * pmu_analog.c) is then aliased to delay_nus via the script assignment
-         * below, keeping ldo13_on→delay_nus.636 a RAM→RAM 23-bit jump. */
+        /* delay_nus is now in .text (Flash); *(.text.delay_nus*) is kept as a
+         * no-op wildcard in case any variant ever needs RAM placement again. */
         *(.text.delay_nus*)
         *(.chargebox_code)
         *(.os_critical_code)
@@ -474,15 +472,10 @@ SECTIONS
 /* ── PI32V2 LTO static-promotion alias ──────────────────────────────────
  * pmu_analog.c (inside cpu.a) defines a static delay_nus.  During LTO,
  * this conflicts with our external delay_nus (ram_stubs.c) and gets
- * promoted to the unique name delay_nus.636, losing its section attribute.
- * Without the attribute the linker places delay_nus.636 in .text (Flash).
- * ldo13_on (in .volatile_ram_code, RAM) then generates a 23-bit jump to
- * Flash that overflows → R_PI32V2_LONG_JUMP_23M2 relocation truncated.
- *
- * Fix: compile ram_stubs.c with -fno-lto so delay_nus is a real native
- * symbol in .text.delay_nus (placed in RAM by *(.text.delay_nus*) above).
- * This assignment then redirects delay_nus.636 to that RAM address,
- * making the ldo13_on→delay_nus.636 call RAM→RAM and always in range. */
+ * promoted to the unique name delay_nus.636.  Our delay_nus lives in
+ * .text (Flash) — ldo13_on/___real_ldo13_on also ends up in .text (Flash)
+ * after --wrap renames it.  This alias ensures delay_nus.636 resolves to
+ * the same Flash address, keeping any residual Flash→Flash call in range. */
 delay_nus.636 = delay_nus;
 
 text_begin  = ADDR(.text) ;
