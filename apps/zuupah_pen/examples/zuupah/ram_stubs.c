@@ -89,16 +89,23 @@ void P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) {
     real_func(addr, start, len, data);
 }
 
-/* ── Custom C implementations for gpio / delay_nus ──────────────────── */
-/* The prebuilt libraries contain BOTH Flash callers (e.g. DCDC13_EN →   */
-/* gpio_set_die) and RAM callers (e.g. ldo13_on → delay_nus).            */
+/* ── Custom C implementations for gpio / pmu_analog RAM stubs ───────── */
 /*                                                                         */
-/* gpio_* stay in .text (Flash): Flash callers cannot reach RAM targets.  */
-/* LTO will inline or resolve these within Flash without range issues.    */
+/* Problem: pmu_analog.c (inside cpu.a/btctrler.a) has functions in      */
+/* .volatile_ram_code (RAM) that call helpers compiled as static          */
+/* functions. LTO promotes these static helpers to global names like      */
+/* "delay_nus.636" — but the section attribute is lost, so they land in   */
+/* .text (Flash). A RAM→Flash 23-bit jump then fails with:               */
+/*   R_PI32V2_LONG_JUMP_23M2 relocation truncated to fit                  */
 /*                                                                         */
-/* delay_nus is in AT_VOLATILE_RAM_CODE (RAM): its only library caller    */
-/* ldo13_on lives in .volatile_ram_code; a RAM→Flash 23-bit jump would   */
-/* exceed the ±8 MB PI32V2 limit (R_PI32V2_LONG_JUMP_23M2).              */
+/* Fix: override the RAM-resident callers (e.g. ldo13_on) entirely with  */
+/* our own AT_VOLATILE_RAM_CODE implementations. Because ours are global  */
+/* symbols and the linker uses --allow-multiple-definition, our version   */
+/* wins. We never call delay_nus.636 — we call our own delay_nus         */
+/* (also in RAM) or use direct ROM function pointers.                     */
+/*                                                                         */
+/* gpio_* stay in .text (Flash): their callers (e.g. DCDC13_EN) are      */
+/* in Flash — a Flash→RAM jump would also fail.                           */
 
 #include "asm/br23.h"
 
@@ -166,11 +173,35 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
+/* ── delay_nus — RAM-resident microsecond delay ──────────────────────── */
+/* Keep in .volatile_ram_code so any RAM caller can reach it without a   */
+/* cross-section 23-bit jump. __attribute__((noinline)) prevents LTO     */
+/* from cloning it into a .text variant.                                  */
 AT_VOLATILE_RAM_CODE __attribute__((noinline))
 void delay_nus(unsigned int nus) {
-    /* Rough NOP delay loop for microsecond waits */
     unsigned int loops = nus * 12;
     while (loops--) {
         __asm__ volatile ("nop");
+    }
+}
+
+/* ── ldo13_on — RAM-resident LDO 1.3 V enable ────────────────────────── */
+/* The library version (in pmu_analog.c / .volatile_ram_code) calls a    */
+/* static delay_nus that LTO promotes to delay_nus.636 and places in     */
+/* .text (Flash).  The resulting RAM→Flash 23-bit jump fails.            */
+/*                                                                         */
+/* Our override calls:                                                     */
+/*   p33_or_1byte ROM (0x1111a6) via function pointer — absolute 32-bit  */
+/*   delay_nus (above, also RAM) — RAM→RAM, always in range               */
+/*                                                                         */
+/* LDO13_EN(1) = P33_TX_NBIT(P3_ANA_CON0, BIT(2), 1)                    */
+/*             = p33_or_1byte(0x00, 0x04)                                 */
+AT_VOLATILE_RAM_CODE __attribute__((noinline))
+void ldo13_on(unsigned int udelay) {
+    void (* volatile fn)(unsigned short, unsigned char) =
+        (void (* volatile)(unsigned short, unsigned char))0x1111a6; /* p33_or_1byte ROM */
+    fn(0x00u, 0x04u);   /* set BIT(2) of P3_ANA_CON0 = enable LDO13 */
+    if (udelay) {
+        delay_nus(udelay);
     }
 }
