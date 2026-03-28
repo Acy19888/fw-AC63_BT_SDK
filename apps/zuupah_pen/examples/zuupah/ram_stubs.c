@@ -220,6 +220,11 @@ void power_set_callback(u8 mode,
  * No-op: acceptable for a pen that doesn't use the DAC in sleep.           */
 void power_keep_dacvdd_en(u8 en) { (void)en; }
 
+/* power_wakeup_init — programs the hardware wakeup sources (port edges,
+ * charge detect, RTC alarm, LVD).  No-op: the pen has no sleep mode;
+ * wakeup sources are never armed.                                          */
+void power_wakeup_init(const struct wakeup_param *param) { (void)param; }
+
 /* ── power_set_soft_poweroff ─────────────────────────────────────────────── */
 /* Defined in power_hw.c.o (now removed from cpu.a).  Called from Flash     */
 /* (zuupah_main.c LTO), so no AT_VOLATILE_RAM_CODE needed.  Spin forever:   */
