@@ -302,11 +302,10 @@ SECTIONS
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
-        /* LTO promotes static delay_nus to delay_nus.636 (no section attr).
-         * With -ffunction-sections it lands in .text.delay_nus or similar.
-         * Keep ALL delay_nus variants in RAM so the ldo13_on→delay_nus
-         * call (RAM→RAM) stays within the 23-bit PI32V2 jump range. */
-        *(.text.delay_nus*)
+        /* Note: *(.text.delay_nus*) was removed here.
+         * delay_nus.636 stays in .text (Flash) alongside __real_ldo13_on;
+         * Flash→Flash 23-bit jumps are in range. External ldo13_on calls
+         * are wrapped to __wrap_ldo13_on (RAM) which uses its own RAM delay_nus. */
         *(.chargebox_code)
         *(.os_critical_code)
         *(.chargebox_code)
@@ -472,18 +471,17 @@ SECTIONS
 #include "driver/cpu/br23/driver_lib.ld"
 
 /* ── PI32V2 LTO static-promotion alias ──────────────────────────────────
- * LTO promotes static delay_nus (in pmu_analog.c / cpu.a:power_hw.c.o)
- * to a global symbol delay_nus.636 with no section attribute, so it
- * lands in .text (Flash).  ldo13_on is in .volatile_ram_code (RAM) and
- * generates a 23-bit R_PI32V2_LONG_JUMP_23M2 relocation that cannot
- * span the ~30 MB RAM→Flash gap.
+ * With --wrap=ldo13_on the original ldo13_on is renamed __real_ldo13_on
+ * and its section attribute is lost, so it lands in .text (Flash).
+ * delay_nus.636 (the LTO-promoted static helper it calls) also lands in
+ * .text (Flash) naturally.  Flash→Flash 23-bit jumps are always in range,
+ * so we must NOT redirect delay_nus.636 to our RAM-resident delay_nus —
+ * that would create a Flash→RAM gap of ~512 MB that cannot fit in 23 bits.
  *
- * Assigning delay_nus.636 = delay_nus here forces the linker to resolve
- * the relocation to our RAM-resident delay_nus (ram_stubs.c), making
- * the call RAM→RAM and always within the ±8 MB 23-bit range.
- *
- * GNU ld: a script-level assignment always overrides object-file defs. */
-delay_nus.636 = delay_nus;
+ * External callers of ldo13_on are redirected to __wrap_ldo13_on (RAM),
+ * which calls our own delay_nus (also RAM) — RAM→RAM, always in range.
+ * The delay_nus.636 = delay_nus assignment below is intentionally removed.
+ * ──────────────────────────────────────────────────────────────────────── */
 
 text_begin  = ADDR(.text) ;
 text_size   = SIZEOF(.text) ;
