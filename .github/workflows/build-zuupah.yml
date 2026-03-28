@@ -60,75 +60,109 @@ jobs:
           fi
           echo "Clang gefunden: $CLANG"
           $CLANG --version
-          echo "TOOL_DIR=$(dirname $CLANG)" >> $GITHUB_ENV
+          TOOLDIR=$(dirname "$CLANG")
+          echo "TOOL_DIR=$TOOLDIR" >> $GITHUB_ENV
+          # Detect JieLi's LLVM version for matching dis/as tools
+          LLVM_VER=$("$CLANG" --version 2>&1 | grep -oP '(?i)clang version \K\d+' | head -1 || echo "")
+          echo "JieLi LLVM version: ${LLVM_VER:-unknown}"
+          echo "JIELI_LLVM_VER=${LLVM_VER}" >> $GITHUB_ENV
+          # List all tools in JieLi bin for diagnostics
+          echo "Tools in JieLi bin:"
+          ls "$TOOLDIR/" | head -60
 
       # ── 5. Build-Abhängigkeiten ───────────────────────────────────────────────
       - name: Install Build Dependencies
         run: |
           sudo apt-get update -q
           sudo apt-get install -y make libssl-dev llvm-14
+          # Also install matching LLVM version if different from 14
+          if [ -n "$JIELI_LLVM_VER" ] && [ "$JIELI_LLVM_VER" != "14" ]; then
+            sudo apt-get install -y "llvm-${JIELI_LLVM_VER}" 2>&1 | tail -5 || true
+            echo "Installed llvm-${JIELI_LLVM_VER}"
+          fi
 
       # ── 5.5. Patch power_hw.c.o — fix delay_nus section attribute ────────────
       # LTO promotes static delay_nus (pmu_analog.c) to delay_nus.636 with no
       # section attribute → lands in .text (Flash). ldo13_on in .volatile_ram_code
       # (RAM) tries to call it via 23-bit PI32V2 jump → truncated relocation.
-      # Fix: add section ".volatile_ram_code" to delay_nus in the LLVM IR bitcode
-      # before linking, so delay_nus.636 ends up in RAM alongside ldo13_on.
+      # Fix: add section ".volatile_ram_code" to @delay_nus in the LLVM IR bitcode
+      # BEFORE LTO runs, so delay_nus.636 ends up in RAM alongside ldo13_on.
       - name: Patch cpu.a - fix delay_nus section attribute
         run: |
           set -e
-          TOOLDIR=$(find /opt/jieli -name "clang" -type f 2>/dev/null | head -1 | xargs dirname 2>/dev/null || echo "")
-          echo "JieLi tool dir: $TOOLDIR"
-          ls "$TOOLDIR/" 2>/dev/null | grep -i "llvm\|dis\|as$" | head -20 || true
-
           CPU_A="cpu/br23/liba/cpu.a"
+          TOOLDIR="$TOOL_DIR"   # set by Verify Toolchain step
+          echo "=== Patching $CPU_A ==="
+          echo "JieLi LLVM version: ${JIELI_LLVM_VER:-unknown}"
+
           WORK="/tmp/bitcode_patch"
           mkdir -p "$WORK"
-          cp "$CPU_A" "$WORK/cpu.a"
           cd "$WORK"
-          ar x cpu.a power_hw.c.o
+          ar x "$GITHUB_WORKSPACE/$CPU_A" power_hw.c.o
           echo "Extracted power_hw.c.o: $(wc -c < power_hw.c.o) bytes"
           file power_hw.c.o
+          xxd power_hw.c.o | head -2   # show magic bytes for version detection
 
-          # Find llvm-dis: prefer JieLi's, fall back to Ubuntu's llvm-14
+          # ── Find llvm-dis + llvm-as (try JieLi first, then version-matched, then 14)
           LLVMDIS=""
           LLVMAS=""
-          for dis in "$TOOLDIR/llvm-dis" llvm-dis-14 llvm-dis; do
-            if command -v "$dis" >/dev/null 2>&1 || [ -f "$dis" ]; then
-              LLVMDIS="$dis"
-              LLVMAS="${dis/dis/as}"
-              echo "Using: $LLVMDIS"
-              break
-            fi
-          done
-
-          if [ -z "$LLVMDIS" ]; then
-            echo "No llvm-dis found — cannot patch (build will attempt unpatched)"
-            exit 0
-          fi
-
-          # Decompile bitcode to LLVM IR text
-          "$LLVMDIS" power_hw.c.o -o power_hw.ll 2>&1 || {
-            echo "llvm-dis failed (version incompatibility?) — trying with --disable-output check"
-            exit 0
+          try_dis() {
+            local d="$1" a="$2"
+            if ([ -f "$d" ] || command -v "$d" >/dev/null 2>&1) &&
+               ([ -f "$a" ] || command -v "$a" >/dev/null 2>&1); then
+              LLVMDIS="$d"; LLVMAS="$a"
+              echo "Selected dis=$d  as=$a"
+              return 0
+            fi; return 1
           }
-          echo "Decompiled OK, $(wc -l < power_hw.ll) lines"
-          grep -n "delay_nus" power_hw.ll | head -10
+          try_dis "$TOOLDIR/llvm-dis"                        "$TOOLDIR/llvm-as"         ||
+          try_dis "$TOOLDIR/opt"                             "$TOOLDIR/llvm-as"         ||
+          try_dis "llvm-dis-${JIELI_LLVM_VER}"               "llvm-as-${JIELI_LLVM_VER}" ||
+          try_dis "opt-${JIELI_LLVM_VER}"                    "llvm-as-${JIELI_LLVM_VER}" ||
+          try_dis "llvm-dis-14"                              "llvm-as-14"               ||
+          try_dis "llvm-dis-13"                              "llvm-as-13"               ||
+          try_dis "llvm-dis-12"                              "llvm-as-12"               ||
+          { echo "FATAL: no llvm-dis/llvm-as found"; exit 1; }
 
-          # Patch: add section ".volatile_ram_code" to delay_nus definition
+          # ── Disassemble bitcode → LLVM IR text
+          DISOK=0
+          if [ "$LLVMDIS" = "$TOOLDIR/opt" ] || echo "$LLVMDIS" | grep -q "^opt"; then
+            # opt uses -S flag instead
+            "$LLVMDIS" -S power_hw.c.o -o power_hw.ll 2>&1 && DISOK=1 || true
+          else
+            "$LLVMDIS" power_hw.c.o -o power_hw.ll 2>&1 && DISOK=1 || true
+          fi
+          if [ $DISOK -eq 0 ]; then
+            echo "FATAL: $LLVMDIS could not parse JieLi bitcode."
+            echo "Check that LLVM version matches (JieLi=${JIELI_LLVM_VER:-?}, tool=$LLVMDIS)"
+            exit 1
+          fi
+          echo "Disassembled: $(wc -l < power_hw.ll) lines of IR"
+          echo "delay_nus occurrences BEFORE patch:"
+          grep -n "delay_nus" power_hw.ll | head -15
+
+          # ── Apply Python patch
           python3 "$GITHUB_WORKSPACE/.github/scripts/patch_bitcode.py" power_hw.ll
 
-          # Reassemble patched IR back to bitcode
-          "$LLVMAS" power_hw.ll -o power_hw_patched.c.o 2>&1 || {
-            echo "llvm-as failed — skipping patch"
-            exit 0
-          }
-          echo "Reassembled patched bitcode: $(wc -c < power_hw_patched.c.o) bytes"
+          # ── Verify patch was applied
+          echo "delay_nus occurrences AFTER patch:"
+          grep -n "delay_nus\|volatile_ram_code" power_hw.ll | head -15
+          if ! grep -q 'volatile_ram_code' power_hw.ll; then
+            echo "FATAL: patch_bitcode.py did not add section attribute."
+            exit 1
+          fi
 
-          # Replace in archive
-          cp cpu.a "$GITHUB_WORKSPACE/$CPU_A"
-          ar r "$GITHUB_WORKSPACE/$CPU_A" power_hw_patched.c.o
-          echo "✓ Updated $CPU_A with patched power_hw.c.o (delay_nus now in .volatile_ram_code)"
+          # ── Reassemble patched IR → bitcode (MUST use same version as dis)
+          "$LLVMAS" power_hw.ll -o power_hw_patched.c.o 2>&1 || {
+            echo "FATAL: $LLVMAS could not assemble patched IR."
+            exit 1
+          }
+          echo "Patched bitcode: $(wc -c < power_hw_patched.c.o) bytes"
+
+          # ── Replace member in archive (keep original member name!)
+          cp power_hw_patched.c.o power_hw.c.o
+          ar r "$GITHUB_WORKSPACE/$CPU_A" power_hw.c.o
+          echo "✓ Replaced power_hw.c.o in $CPU_A (delay_nus now has .volatile_ram_code)"
 
       # ── 6. Firmware kompilieren + sdk.elf sofort sichern ────────────────────
       - name: Build Zuupah Firmware
