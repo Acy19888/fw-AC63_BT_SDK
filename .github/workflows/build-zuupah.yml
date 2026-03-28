@@ -17,7 +17,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       # ── 1. Repository laden ──────────────────────────────────────────────────
@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /opt/jieli
-          key: jieli-linux-toolchain-v1
+          key: jieli-linux-toolchain-v2
 
       # ── 3. JieLi Linux Toolchain herunterladen + installieren ────────────────
       - name: Download & Install JieLi Toolchain
@@ -49,10 +49,10 @@ jobs:
           echo "Toolchain installiert!"
           ls /opt/jieli/
 
-      # ── 4. Toolchain prüfen ───────────────────────────────────────────────────
+      # ── 4. Toolchain prüfen + Hilfsprogramme lokalisieren ────────────────────
       - name: Verify Toolchain
         run: |
-          # Clang finden (könnte in verschiedenen Unterordnern sein)
+          # Clang finden
           CLANG=$(find /opt/jieli -name "clang" -type f 2>/dev/null | head -1)
           if [ -z "$CLANG" ]; then
             echo "FEHLER: clang nicht gefunden!"
@@ -63,101 +63,263 @@ jobs:
           $CLANG --version
           TOOLDIR=$(dirname "$CLANG")
           echo "TOOL_DIR=$TOOLDIR" >> $GITHUB_ENV
-          # Detect JieLi's LLVM version for matching dis/as tools
+
+          # Detect JieLi's LLVM version
           LLVM_VER=$("$CLANG" --version 2>&1 | grep -oP '(?i)clang version \K\d+' | head -1 || echo "")
           echo "JieLi LLVM version: ${LLVM_VER:-unknown}"
           echo "JIELI_LLVM_VER=${LLVM_VER}" >> $GITHUB_ENV
-          # List all tools in JieLi bin for diagnostics
+
+          # host-client suchen (erstellt jl_isd.fw ohne Gerät)
+          HC=$(find /opt/jieli -name "host-client" -type f 2>/dev/null | head -1)
+          if [ -n "$HC" ]; then
+            echo "host-client gefunden: $HC"
+            echo "HOST_CLIENT=$HC" >> $GITHUB_ENV
+          else
+            echo "host-client NICHT gefunden (OTA-Paket wird nicht erstellt)"
+          fi
+
+          # OBJSIZEDUMP suchen
+          OBJSZDUMP=$(find /opt/jieli -name "objsizedump" -o -name "size" -type f 2>/dev/null | head -1)
+          if [ -n "$OBJSZDUMP" ]; then
+            echo "OBJSIZEDUMP=$OBJSZDUMP" >> $GITHUB_ENV
+          fi
+
+          # strip-ini suchen
+          STRIPINI=$(find /opt/jieli /opt/utils -name "strip-ini" -type f 2>/dev/null | head -1)
+          if [ -n "$STRIPINI" ]; then
+            echo "STRIP_INI=$STRIPINI" >> $GITHUB_ENV
+          fi
+
+          # lz4_packet suchen
+          LZ4PKT=$(find /opt/jieli -name "lz4_packet" -type f 2>/dev/null | head -1)
+          if [ -n "$LZ4PKT" ]; then
+            echo "LZ4_PACKET=$LZ4PKT" >> $GITHUB_ENV
+          fi
+
           echo "Tools in JieLi bin:"
           ls "$TOOLDIR/" | head -60
+          echo "Alle executables in /opt/jieli:"
+          find /opt/jieli -type f -executable | head -40
 
-      # ── 5. Build-Abhängigkeiten ───────────────────────────────────────────────
+      # ── 5. Build-Abhängigkeiten (inkl. Wine für OTA-Paket) ───────────────────
       - name: Install Build Dependencies
         run: |
           sudo apt-get update -q
           sudo apt-get install -y make libssl-dev llvm-14
-          # Also install matching LLVM version if different from 14
+          # Matching LLVM version falls abweichend
           if [ -n "$JIELI_LLVM_VER" ] && [ "$JIELI_LLVM_VER" != "14" ]; then
             sudo apt-get install -y "llvm-${JIELI_LLVM_VER}" 2>&1 | tail -5 || true
-            echo "Installed llvm-${JIELI_LLVM_VER}"
           fi
+          # Wine für fw_add.exe und ufw_maker.exe
+          echo "Installiere Wine..."
+          sudo dpkg --add-architecture i386
+          sudo apt-get update -q
+          sudo apt-get install -y wine wine32 2>/dev/null || \
+          sudo apt-get install -y wine-stable 2>/dev/null || \
+          sudo apt-get install -y wine64 2>/dev/null || true
+          wine --version 2>/dev/null && echo "✓ Wine verfügbar" || echo "✗ Wine nicht verfügbar"
 
       # ── 6a. cpu.a NICHT mehr patchen ────────────────────────────────────────
-      # Die JieLi SDK LFLAGS lösen das delay_nus/ldo13_on Problem korrekt:
-      #   --plugin-opt=-inline-normal-into-special-section=true
-      #     → LTO inlined delay_nus direkt in ldo13_on (.volatile_ram_code)
-      #   --dont-complain-call-overflow → unterdrückt verbleibende Bereichsfehler
-      # power_hw.c.o bleibt im Archiv; ldo13_on kommt aus der Library.
+      # JieLi SDK LFLAGS lösen das delay_nus/ldo13_on Problem:
+      #   --plugin-opt=-inline-normal-into-special-section=true (LTO inline)
+      #   --dont-complain-call-overflow (unterdrückt Bereichsfehler)
 
-      # ── 6b. Firmware kompilieren + sdk.elf sofort sichern ───────────────────
+      # ── 6b. Firmware kompilieren ─────────────────────────────────────────────
       - name: Build Zuupah Firmware
+        env:
+          CPU: br23
+          APP_CASE: spp_and_le
         run: |
           mkdir -p $GITHUB_WORKSPACE/firmware_output
 
           cd apps/zuupah_pen/board/br23
           ulimit -n 8096
-          echo "Starte Build..."
-          make VERBOSE=1 2>&1 | tee /tmp/build.log
-          echo "Build exit code: $?"
+          echo "Starte Build (CPU=$CPU, APP_CASE=$APP_CASE)..."
 
-          # sdk.elf SOFORT sichern bevor host-client es löscht
-          # (OUT_ELF = ../../../../cpu/br23/tools/sdk.elf relativ zu board/br23)
+          # PATH um JieLi-Hilfsprogramme erweitern (für download.sh)
+          export PATH="$TOOL_DIR:$PATH"
+          # Symlinks für JieLi Hilfsprogramme setzen falls nötig
+          if [ -n "$HOST_CLIENT" ]; then
+            sudo ln -sf "$HOST_CLIENT" /usr/local/bin/host-client 2>/dev/null || true
+          fi
+          if [ -n "$OBJSIZEDUMP" ]; then
+            sudo ln -sf "$OBJSIZEDUMP" /usr/local/bin/objsizedump 2>/dev/null || true
+            export OBJSIZEDUMP="$OBJSIZEDUMP"
+          else
+            # Fallback: dummy objsizedump damit download.sh nicht abbricht
+            printf '#!/bin/sh\nllvm-size-14 "$@" 2>/dev/null || true\n' | sudo tee /usr/local/bin/objsizedump > /dev/null
+            sudo chmod +x /usr/local/bin/objsizedump
+          fi
+          if [ -n "$STRIP_INI" ]; then
+            sudo ln -sf "$STRIP_INI" /usr/local/bin/strip-ini 2>/dev/null || true
+            sudo mkdir -p /opt/utils
+            sudo ln -sf "$STRIP_INI" /opt/utils/strip-ini 2>/dev/null || true
+          else
+            # Fallback: strip-ini als no-op (INI bleibt unverändert)
+            printf '#!/bin/sh\n# strip-ini stub\n' | sudo tee /opt/utils/strip-ini > /dev/null 2>/dev/null || \
+            sudo mkdir -p /opt/utils && printf '#!/bin/sh\n# strip-ini stub\n' | sudo tee /opt/utils/strip-ini > /dev/null && sudo chmod +x /opt/utils/strip-ini
+          fi
+          if [ -n "$LZ4_PACKET" ]; then
+            sudo ln -sf "$LZ4_PACKET" /usr/local/bin/lz4_packet 2>/dev/null || true
+          else
+            printf '#!/bin/sh\n# lz4_packet stub\n' | sudo tee /usr/local/bin/lz4_packet > /dev/null
+            sudo chmod +x /usr/local/bin/lz4_packet
+          fi
+
+          make VERBOSE=1 2>&1 | tee /tmp/build.log
+          BUILD_EXIT=${PIPESTATUS[0]}
+          echo "Build exit code: $BUILD_EXIT"
+
+          # sdk.elf sichern
           ELF="../../../../cpu/br23/tools/sdk.elf"
           if [ -f "$ELF" ]; then
             cp "$ELF" $GITHUB_WORKSPACE/firmware_output/sdk.elf
-            echo "✓ sdk.elf gesichert: $(wc -c < $GITHUB_WORKSPACE/firmware_output/sdk.elf) bytes"
+            echo "✓ sdk.elf: $(wc -c < $GITHUB_WORKSPACE/firmware_output/sdk.elf) bytes"
           else
-            echo "✗ sdk.elf nicht gefunden nach make"
-            ls -la ../../../../cpu/br23/tools/*.elf 2>/dev/null || echo "keine .elf Dateien"
+            echo "✗ sdk.elf nicht gefunden"
+            ls -la ../../../../cpu/br23/tools/*.elf 2>/dev/null || true
           fi
+
+          # app.bin Status prüfen
+          if [ -f "../../../../cpu/br23/tools/app.bin" ]; then
+            echo "✓ app.bin nach Build vorhanden"
+          else
+            echo "✗ app.bin fehlt nach Build!"
+          fi
+
+          # jl_isd.fw Status (von host-client erstellt?)
+          if [ -f "../../../../cpu/br23/tools/jl_isd.fw" ]; then
+            echo "✓ jl_isd.fw von host-client erstellt: $(wc -c < ../../../../cpu/br23/tools/jl_isd.fw) bytes"
+          else
+            echo "⚠ jl_isd.fw nicht vorhanden (wird in nächstem Schritt manuell erstellt)"
+          fi
+
+          [ $BUILD_EXIT -eq 0 ] || exit $BUILD_EXIT
+
+      # ── 6c. OTA-Firmware-Paket erstellen (jl_isd.fw → .ufw) ─────────────────
+      - name: Generate OTA Package
+        if: always()
+        env:
+          CPU: br23
+          APP_CASE: spp_and_le
+        run: |
+          cd cpu/br23/tools
+          echo "=== OTA-Paket-Erstellung ==="
+
+          # 1) Falls host-client jl_isd.fw NOCH NICHT erstellt hat: manuell aufrufen
+          if [ ! -f "jl_isd.fw" ] && [ -n "$HOST_CLIENT" ]; then
+            echo "Rufe host-client manuell auf..."
+            chmod +x "$HOST_CLIENT"
+            # Alle benötigten Dateien prüfen
+            ls -la app.bin br23loader.bin uboot.boot ota_all.bin isd_config.ini flash_params.bin 2>/dev/null || true
+            # host-client aufrufen
+            "$HOST_CLIENT" \
+              -project br23_sdk_spp_and_le \
+              -f "app.bin br23loader.bin uboot.boot ota_all.bin isd_config.ini flash_params.bin" \
+              sdk.elf 2>&1 || true
+            if [ -f "jl_isd.fw" ]; then
+              echo "✓ jl_isd.fw erstellt: $(wc -c < jl_isd.fw) bytes"
+            else
+              echo "✗ host-client konnte jl_isd.fw nicht erstellen"
+              echo "host-client help:"
+              "$HOST_CLIENT" --help 2>&1 | head -20 || true
+              echo "Alle Dateien in tools/:"
+              ls -la *.fw *.bin 2>/dev/null || ls -la | head -20
+            fi
+          fi
+
+          # 2) .ufw aus jl_isd.fw erzeugen (Windows-Tools via Wine)
+          if [ -f "jl_isd.fw" ]; then
+            echo "Erstelle .ufw via Wine + fw_add.exe + ufw_maker.exe..."
+
+            # WINEPREFIX initialisieren (headless)
+            export WINEDEBUG=-all
+            export WINEPREFIX=/tmp/wineprefix
+            wine wineboot --init 2>/dev/null || true
+
+            # OTA-Bin hinzufügen
+            wine fw_add.exe -noenc \
+              -fw jl_isd.fw \
+              -add ota_all.bin -name ota.bin -type 100 \
+              -out jl_isd_ota.fw 2>/dev/null
+            if [ ! -f "jl_isd_ota.fw" ]; then
+              echo "fw_add fehlgeschlagen, versuche direkte Konvertierung..."
+              cp jl_isd.fw jl_isd_ota.fw
+            fi
+
+            # Versions-Info hinzufügen
+            wine fw_add.exe -noenc \
+              -fw jl_isd_ota.fw \
+              -add script.ver \
+              -out jl_isd_ota.fw 2>/dev/null || true
+
+            # .ufw erzeugen
+            wine ufw_maker.exe -fw_to_ufw jl_isd_ota.fw 2>/dev/null || \
+            wine ufw_maker.exe -fw_to_ufw jl_isd.fw 2>/dev/null || true
+
+            # Ergebnis prüfen
+            UFW=$(ls jl_isd*.ufw 2>/dev/null | head -1)
+            if [ -n "$UFW" ]; then
+              echo "✓ OTA-Paket erstellt: $UFW ($(wc -c < $UFW) bytes)"
+              cp "$UFW" $GITHUB_WORKSPACE/firmware_output/zuupah_pen_ota.ufw
+            else
+              echo "✗ .ufw konnte nicht erstellt werden"
+              echo "Wine log:"
+              ls /tmp/wineprefix/ 2>/dev/null || true
+            fi
+          else
+            echo "✗ Kein jl_isd.fw vorhanden - OTA-Paket übersprungen"
+            echo "  → Ohne host-client in der Toolchain ist OTA nicht möglich"
+            echo "  → Prüfe: find /opt/jieli -name 'host-client'"
+          fi
+
+          echo "=== Dateien in cpu/br23/tools/ ==="
+          ls -lh *.fw *.ufw 2>/dev/null || echo "(keine .fw/.ufw)"
 
       # ── 7. Firmware-Dateien sammeln ───────────────────────────────────────────
       - name: Collect Firmware Files
+        if: always()
         run: |
           mkdir -p firmware_output
 
-          echo "=== ALLE neuen Dateien nach Build ==="
+          echo "=== Alle neuen Dateien nach Build ==="
           find cpu/br23/tools -newer cpu/br23/tools/br23loader.bin -type f 2>/dev/null || echo "(keine neuen Dateien)"
 
-          # app.bin holen (Makefile erzeugt es jetzt VOR dem post-script)
+          # app.bin
           if [ -f "cpu/br23/tools/app.bin" ]; then
             cp cpu/br23/tools/app.bin firmware_output/app.bin
             echo "✓ app.bin: $(wc -c < firmware_output/app.bin) bytes"
           else
-            echo "✗ app.bin nicht gefunden in cpu/br23/tools/"
+            echo "✗ app.bin nicht gefunden"
           fi
 
-          # Flash-Paket: isd_config.ini (CI-generiert), loader, uboot
-          # Diese Dateien werden für isd_download.exe auf Windows benötigt
-          cp cpu/br23/tools/isd_config.ini firmware_output/isd_config.ini && \
-            echo "✓ isd_config.ini kopiert" || echo "✗ isd_config.ini fehlt"
-          cp cpu/br23/tools/br23loader.bin firmware_output/br23loader.bin && \
-            echo "✓ br23loader.bin: $(wc -c < firmware_output/br23loader.bin) bytes" || echo "✗ br23loader.bin fehlt"
-          cp cpu/br23/tools/uboot.boot firmware_output/uboot.boot && \
-            echo "✓ uboot.boot: $(wc -c < firmware_output/uboot.boot) bytes" || echo "✗ uboot.boot fehlt"
-          cp cpu/br23/tools/flash_params.bin firmware_output/flash_params.bin 2>/dev/null && \
-            echo "✓ flash_params.bin kopiert" || echo "✗ flash_params.bin fehlt (optional)"
+          # Flash-Paket (für isd_download.exe auf Windows)
+          for f in isd_config.ini br23loader.bin uboot.boot flash_params.bin cfg_tool.bin; do
+            if [ -f "cpu/br23/tools/$f" ]; then
+              cp "cpu/br23/tools/$f" "firmware_output/$f"
+              echo "✓ $f kopiert"
+            fi
+          done
 
-          # jl_isd.fw suchen (Linux Build Output von host-client)
-          FW=$(find cpu/br23/tools -name "jl_isd*.fw" -o -name "jl_isd*.ufw" 2>/dev/null | head -1)
-          if [ -n "$FW" ]; then
-            cp "$FW" firmware_output/zuupah_pen_firmware.ufw
-            echo "✓ firmware: $FW ($(wc -c < firmware_output/zuupah_pen_firmware.ufw) bytes)"
+          # OTA .ufw (bereits von Schritt 6c nach firmware_output/ kopiert)
+          if [ -f "firmware_output/zuupah_pen_ota.ufw" ]; then
+            echo "✓ OTA-Paket: zuupah_pen_ota.ufw ($(wc -c < firmware_output/zuupah_pen_ota.ufw) bytes)"
           else
-            # Fallback: .ufw NUR aus cpu/br23/tools/ suchen (NICHT cpu/bd29!)
+            # Fallback: alle .ufw aus tools/ suchen (NICHT cpu/bd29!)
             UFW=$(find cpu/br23/tools -name "*.ufw" 2>/dev/null | head -1)
             if [ -n "$UFW" ]; then
-              cp "$UFW" firmware_output/zuupah_pen_firmware.ufw
-              echo "✓ ufw: $UFW ($(wc -c < firmware_output/zuupah_pen_firmware.ufw) bytes)"
+              cp "$UFW" firmware_output/zuupah_pen_ota.ufw
+              echo "✓ ufw (Fallback): $UFW ($(wc -c < firmware_output/zuupah_pen_ota.ufw) bytes)"
             else
-              echo "✗ Kein firmware file in cpu/br23/tools/ gefunden"
+              echo "✗ Kein OTA-Paket (.ufw) gefunden"
+              echo "  → Flash via OTA nicht möglich, nur USB-Flash mit Key"
             fi
           fi
 
           echo "=== firmware_output ==="
           ls -lh firmware_output/
 
-      # ── 8. Build Log als Artifact hochladen ───────────────────────────────────
+      # ── 8. Build Log hochladen ────────────────────────────────────────────────
       - name: Upload Build Log
         if: always()
         uses: actions/upload-artifact@v4
@@ -183,5 +345,11 @@ jobs:
           echo "**Firmware-Dateien:**" >> $GITHUB_STEP_SUMMARY
           ls -lh firmware_output/ >> $GITHUB_STEP_SUMMARY || echo "Keine Dateien" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Download:** Gehe zu Actions → Diesen Run → Artifacts → zuupah-pen-firmware" >> $GITHUB_STEP_SUMMARY
-
+          if [ -f "firmware_output/zuupah_pen_ota.ufw" ]; then
+            echo "**🔵 OTA-Flash:** \`zuupah_pen_ota.ufw\` vorhanden → JL OTA Android-App verwenden" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**⚠️ OTA-Paket:** Nicht erstellt (host-client nicht in Toolchain)" >> $GITHUB_STEP_SUMMARY
+            echo "**USB-Flash:** \`app.bin\` + \`isd_config.ini\` vorhanden (benötigt Key-File)" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Download:** Actions → Diesen Run → Artifacts → zuupah-pen-firmware" >> $GITHUB_STEP_SUMMARY
