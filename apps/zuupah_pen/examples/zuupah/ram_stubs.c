@@ -45,6 +45,35 @@ int (* volatile os_mutex_create_ptr)(OS_MUTEX *) = os_mutex_create;
 int (* volatile os_mutex_pend_ptr)(OS_MUTEX *, int) = os_mutex_pend;
 int (* volatile os_mutex_post_ptr)(OS_MUTEX *) = os_mutex_post;
 
+/* ══ local_irq_disable / local_irq_enable external symbols ══════════════════
+ * cpu.h provides static-inline versions (#if 1 branch) used by source code.
+ * Pre-compiled library objects (e.g. virtual_rtc.c in system.a) were built
+ * with the extern declarations and call the symbol directly.  Those symbols
+ * live in .volatile_ram_code / .os_code (RAM); Flash callers overflow 23-bit.
+ * These Flash-resident definitions replicate cpu.h inline logic exactly,
+ * preserving correct interrupt masking behaviour.                           */
+void local_irq_disable(void)
+{
+    __builtin_pi32v2_cli();
+    irq_lock_cnt[current_cpu_id()]++;
+    q32DSP(0)->IPMASK = 7;
+    __builtin_pi32v2_sti();
+}
+
+void local_irq_enable(void)
+{
+    if (--irq_lock_cnt[current_cpu_id()] == 0) {
+        q32DSP(0)->IPMASK = 0;
+    }
+}
+
+/* __local_irq_enable — unconditional enable, resets nesting count.         */
+void __local_irq_enable(void)
+{
+    irq_lock_cnt[current_cpu_id()] = 0;
+    q32DSP(0)->IPMASK = 0;
+}
+
 /* crc16.c (and other Flash/LTO code) calls os_mutex_pend/post as direct
  * symbol references — NOT through the _ptr macro path.  The real functions
  * live in .os_code (RAM); the Flash→RAM 23-bit jump overflows.
