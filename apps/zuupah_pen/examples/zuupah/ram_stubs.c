@@ -285,18 +285,20 @@ void port_protect(u16 *port_group, u32 port_num)
  * TCFG_AUDIO_ENABLE is defined.  Stub prevents Flash→RAM overflow.        */
 void dac_power_off(void) {}
 
-/* norflash_read — public SFC read (vm_sfc.c, cpu.a LTO).
- * LTO places norflash_read in .text (Flash) but its internal helper
- * _norflash_read lives in .volatile_ram_code (RAM).  The Flash→RAM
- * R_PI32V2_LONG_JUMP_23M2 relocation overflows.
- * Fix: place our override in RAM (AT_VOLATILE_RAM_CODE) so both caller
- * and callee are in the same address space.  Forward to _norflash_read
- * with cache=0 (direct read, no cache layer).                             */
+/* norflash_read — public SFC read (vm_sfc.c / vm.c, cpu.a LTO).
+ * norflash_read itself is in .text (Flash); _norflash_read is in
+ * .volatile_ram_code (RAM) — direct call overflows 23-bit limit.
+ *
+ * Cannot move norflash_read to RAM either: sfc_read (vm.c, Flash) calls
+ * norflash_read, so that just shifts the overflow one level up.
+ *
+ * Fix: keep norflash_read in Flash, reach _norflash_read via a volatile
+ * 32-bit function pointer (indirect call through register, no range limit). */
 extern int _norflash_read(u32 addr, u8 *buf, u32 len, u8 cache);
-AT_VOLATILE_RAM_CODE __attribute__((noinline))
 int norflash_read(u32 addr, u8 *buf, u32 len)
 {
-    return _norflash_read(addr, buf, len, 0);
+    int (* volatile fn)(u32, u8 *, u32, u8) = _norflash_read;
+    return fn(addr, buf, len, 0);
 }
 
 /* norflash_ioctl — generic SFC/VM flash ioctl (vm_sfc.c, cpu.a LTO .text).
