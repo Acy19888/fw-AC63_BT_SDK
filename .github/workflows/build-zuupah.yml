@@ -82,7 +82,16 @@ jobs:
             echo "Installed llvm-${JIELI_LLVM_VER}"
           fi
 
-      # ── 6. Firmware kompilieren + sdk.elf sofort sichern ────────────────────
+      # ── 6a. cpu.a patchen: power_hw.c.o entfernen ───────────────────────────
+      # power_hw.c.o enthält pmu_analog.c's ldo13_on (PUBLIC→Flash per LTO)
+      # und dessen statischen Helper delay_nus (STATIC→RAM per LTO).
+      # Der Flash→RAM-23-bit-Sprung schlägt fehl (R_PI32V2_LONG_JUMP_23M2).
+      # Lösung: Objekt aus dem Archiv entfernen; ram_stubs.c liefert ldo13_on
+      # als AT_VOLATILE_RAM_CODE (kompiliert mit -fno-lto, kein delay_nus nötig).
+      - name: Patch cpu.a - remove power_hw.c.o
+        run: ar d cpu/br23/liba/cpu.a power_hw.c.o
+
+      # ── 6b. Firmware kompilieren + sdk.elf sofort sichern ───────────────────
       - name: Build Zuupah Firmware
         run: |
           mkdir -p $GITHUB_WORKSPACE/firmware_output

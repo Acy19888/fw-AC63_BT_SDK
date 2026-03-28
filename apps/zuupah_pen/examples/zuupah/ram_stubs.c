@@ -171,9 +171,20 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
-/* ldo13_on is provided by the cpu.a LTO blob (pmu_analog.c).
- * The linker script (sdk_ld.c) uses EXCLUDE_FILE(*lto-llvm-*) on
- * .volatile_ram_code so that delay_nus (a STATIC helper of ldo13_on that
- * LTO keeps in .volatile_ram_code) is placed as an orphan in Flash alongside
- * ldo13_on (which LTO puts in .text/Flash).  Both end up in Flash, so the
- * 23-bit PI32V2 relocation is within range.  No override needed here. */
+/* ── ldo13_on ────────────────────────────────────────────────────────────── */
+/* power_hw.c.o is removed from cpu.a in CI (ar d cpu.a power_hw.c.o).      */
+/* That eliminates pmu_analog.c's ldo13_on + its static delay_nus from the  */
+/* LTO blob entirely — no more Flash→RAM 23-bit overflow.  Our version here  */
+/* (compiled -fno-lto, AT_VOLATILE_RAM_CODE) becomes the sole definition.   */
+/* LDO13_EN(1) = p33_or_1byte(0x00, 0x04) via ROM at 0x1111a6              */
+AT_VOLATILE_RAM_CODE __attribute__((noinline))
+void ldo13_on(unsigned int udelay)
+{
+    void (* volatile fn)(unsigned short, unsigned char) =
+        (void (* volatile)(unsigned short, unsigned char))0x1111a6u;
+    fn(0x00u, 0x04u);   /* P3_ANA_CON0 bit 2 → enable LDO13 */
+    if (udelay) {
+        volatile unsigned int loops = udelay * 12u;
+        while (loops--) { __asm__ volatile("nop"); }
+    }
+}
