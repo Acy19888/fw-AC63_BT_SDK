@@ -471,6 +471,20 @@ SECTIONS
 #include "update/update.ld"
 #include "driver/cpu/br23/driver_lib.ld"
 
+/* ── PI32V2 LTO static-promotion alias ──────────────────────────────────
+ * LTO promotes static delay_nus (in pmu_analog.c / cpu.a:power_hw.c.o)
+ * to a global symbol delay_nus.636 with no section attribute, so it
+ * lands in .text (Flash).  ldo13_on is in .volatile_ram_code (RAM) and
+ * generates a 23-bit R_PI32V2_LONG_JUMP_23M2 relocation that cannot
+ * span the ~30 MB RAM→Flash gap.
+ *
+ * Assigning delay_nus.636 = delay_nus here forces the linker to resolve
+ * the relocation to our RAM-resident delay_nus (ram_stubs.c), making
+ * the call RAM→RAM and always within the ±8 MB 23-bit range.
+ *
+ * GNU ld: a script-level assignment always overrides object-file defs. */
+delay_nus.636 = delay_nus;
+
 text_begin  = ADDR(.text) ;
 text_size   = SIZEOF(.text) ;
 text_end    = ADDR(.text) + SIZEOF(.text) ;
