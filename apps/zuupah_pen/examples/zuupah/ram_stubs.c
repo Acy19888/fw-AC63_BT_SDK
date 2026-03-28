@@ -188,6 +188,38 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
+/* ══ Stubs for functions removed with power_hw.c.o ══════════════════════════
+ * power_hw.c.o (and embedded pmu_analog.c) was removed from cpu.a in CI to
+ * eliminate the ldo13_on→delay_nus Flash→RAM 23-bit overflow.  All PUBLIC
+ * functions that the application calls must be provided here.  These stubs
+ * run in Flash (no AT_VOLATILE_RAM_CODE); callers are also in Flash (LTO).  */
+
+#include "asm/power_interface.h"
+
+/* power_init — sets up the power-management state machine.  The bootloader
+ * already configures LDO/DCDC before our code runs, so a no-op is safe for
+ * initial bring-up.  Sleep/wakeup callbacks will simply not be registered.  */
+void power_init(const struct low_power_param *param) { (void)param; }
+
+/* power_set_mode — switches between LDO15 / DCDC15.  No-op: the bootloader
+ * sets the power mode; omitting the switch is safe for basic operation.     */
+void power_set_mode(u8 mode) { (void)mode; }
+
+/* power_set_callback — registers sleep-enter/exit and soft-poweroff hooks.
+ * No-op: zuupah_main.c calls power_set_soft_poweroff() directly.           */
+void power_set_callback(u8 mode,
+                        void (*powerdown_enter)(u8),
+                        void (*powerdown_exit)(u32),
+                        void (*soft_poweroff_enter)(void))
+{
+    (void)mode; (void)powerdown_enter;
+    (void)powerdown_exit; (void)soft_poweroff_enter;
+}
+
+/* power_keep_dacvdd_en — controls whether DACVDD stays on during sleep.
+ * No-op: acceptable for a pen that doesn't use the DAC in sleep.           */
+void power_keep_dacvdd_en(u8 en) { (void)en; }
+
 /* ── power_set_soft_poweroff ─────────────────────────────────────────────── */
 /* Defined in power_hw.c.o (now removed from cpu.a).  Called from Flash     */
 /* (zuupah_main.c LTO), so no AT_VOLATILE_RAM_CODE needed.  Spin forever:   */
