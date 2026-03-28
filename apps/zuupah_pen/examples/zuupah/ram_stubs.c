@@ -89,16 +89,19 @@ void P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) {
     real_func(addr, start, len, data);
 }
 
-/* ── Custom C implementations for RAM functions ─────────────────────── */
-/* Precompiled LLVM IR in cpu.a/system.a contains direct calls to gpio_   */
-/* and delay_nus. Since these callers reside in .volatile_ram_code (RAM,  */
-/* ~0x0000), our definitions must also live there. A RAM→Flash 23-bit     */
-/* jump (R_PI32V2_LONG_JUMP_23M2) exceeds ±8 MB and causes a link error.  */
-/* All functions below are therefore marked AT_VOLATILE_RAM_CODE.         */
+/* ── Custom C implementations for gpio / delay_nus ──────────────────── */
+/* The prebuilt libraries contain BOTH Flash callers (e.g. DCDC13_EN →   */
+/* gpio_set_die) and RAM callers (e.g. ldo13_on → delay_nus).            */
+/*                                                                         */
+/* gpio_* stay in .text (Flash): Flash callers cannot reach RAM targets.  */
+/* LTO will inline or resolve these within Flash without range issues.    */
+/*                                                                         */
+/* delay_nus is in AT_VOLATILE_RAM_CODE (RAM): its only library caller    */
+/* ldo13_on lives in .volatile_ram_code; a RAM→Flash 23-bit jump would   */
+/* exceed the ±8 MB PI32V2 limit (R_PI32V2_LONG_JUMP_23M2).              */
 
 #include "asm/br23.h"
 
-AT_VOLATILE_RAM_CODE
 static JL_PORT_FLASH_TypeDef *get_gpio_port(unsigned int gpio) {
     switch (gpio / 16) {
         case 0: return JL_PORTA;
@@ -109,7 +112,6 @@ static JL_PORT_FLASH_TypeDef *get_gpio_port(unsigned int gpio) {
     }
 }
 
-AT_VOLATILE_RAM_CODE
 int gpio_direction_input(unsigned int gpio) {
     JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
     if (!port) return -1;
@@ -117,7 +119,6 @@ int gpio_direction_input(unsigned int gpio) {
     return 0;
 }
 
-AT_VOLATILE_RAM_CODE
 int gpio_direction_output(unsigned int gpio, int value) {
     JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
     if (!port) return -1;
@@ -127,7 +128,6 @@ int gpio_direction_output(unsigned int gpio, int value) {
     return 0;
 }
 
-AT_VOLATILE_RAM_CODE
 int gpio_set_pull_up(unsigned int gpio, int value) {
     JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
     if (!port) return -1;
@@ -136,7 +136,6 @@ int gpio_set_pull_up(unsigned int gpio, int value) {
     return 0;
 }
 
-AT_VOLATILE_RAM_CODE
 int gpio_set_pull_down(unsigned int gpio, int value) {
     JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
     if (!port) return -1;
@@ -145,7 +144,6 @@ int gpio_set_pull_down(unsigned int gpio, int value) {
     return 0;
 }
 
-AT_VOLATILE_RAM_CODE
 int gpio_set_hd(unsigned int gpio, int value) {
     JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
     if (!port) return -1;
@@ -154,7 +152,6 @@ int gpio_set_hd(unsigned int gpio, int value) {
     return 0;
 }
 
-AT_VOLATILE_RAM_CODE
 int gpio_set_die(unsigned int gpio, int value) {
     JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
     if (!port) return -1;
@@ -163,7 +160,6 @@ int gpio_set_die(unsigned int gpio, int value) {
     return 0;
 }
 
-AT_VOLATILE_RAM_CODE
 int gpio_read(unsigned int gpio) {
     JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
     if (!port) return 0;
