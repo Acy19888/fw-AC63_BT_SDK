@@ -23,14 +23,12 @@ void exception_analyze(void)
 }
 
 /* ── p33_soft_reset ───────────────────────────────────────────────────────── */
-/* Called via inline cpu_reset() which LTO inlines into .text callers.        */
-/* cpu.a calls it from .volatile_ram_code; keep it reachable.                 */
-AT_VOLATILE_RAM_CODE
+/* cpu_reset() is a static inline in cpu.h that LTO inlines into .text        */
+/* (Flash) callers. Flash→RAM 23-bit jump fails, so p33_soft_reset must       */
+/* live in .text (Flash) too. The while(1) stub is safe either way: the WDT   */
+/* triggers a full hardware reset after ~100 ms regardless of location.       */
 void p33_soft_reset(void)
 {
-    /* We don't have the exact P33 register definitions here.
-     * Simply hang in a tight loop. The hardware watchdog (WDT) is enabled
-     * in setup.c and will trigger a full system reset automatically. */
     while(1);
 }
 /* ── os_api.h indirect pointers ─────────────────────────────────────── */
