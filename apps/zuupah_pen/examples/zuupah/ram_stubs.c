@@ -47,31 +47,44 @@ int (* volatile os_mutex_create_ptr)(OS_MUTEX *) = os_mutex_create;
 int (* volatile os_mutex_pend_ptr)(OS_MUTEX *, int) = os_mutex_pend;
 int (* volatile os_mutex_post_ptr)(OS_MUTEX *) = os_mutex_post;
 
-/* ── LTO --wrap trampolines for p33 (ROM) functions ───────────────────── */
+/* ── LTO C-trampolines for p33 (ROM) functions ────────────────────────── */
 /* Precompiled LLVM IR in cpu.a contains direct calls to p33_or_1byte etc.*/
-/* LTO fails the 23-bit jump check. Using --wrap=... in Makefile we catch */
-/* these calls in .text and indirectly call the __real_ ROM functions.    */
+/* These jumps fail the 23-bit range check from .text.                    */
+/* By declaring these functions strongly in .text, LTO prefers them over  */
+/* the ones in cpu.a. We then manually perform a 32-bit indirect call     */
+/* to the true hardware ROM address (found in cpu/br23/tools/rom.lst).    */
 
-extern u8 __real_p33_buf(u8);
-extern void __real_p33_xor_1byte(u16, u8);
-extern void __real_p33_and_1byte(u16, u8);
-extern void __real_p33_or_1byte(u16, u8);
-extern void __real_p33_tx_1byte(u16, u8);
-extern u8 __real_p33_rx_1byte(u16);
-extern void __real_P33_CON_SET(u16, u8, u8, u8);
+u8 p33_buf(u8 buf) {
+    u8 (* volatile real_func)(u8) = (u8 (* volatile)(u8))0x1110b0;
+    return real_func(buf);
+}
 
-u8 (* volatile __real_p33_buf_ptr)(u8) = __real_p33_buf;
-void (* volatile __real_p33_xor_1byte_ptr)(u16, u8) = __real_p33_xor_1byte;
-void (* volatile __real_p33_and_1byte_ptr)(u16, u8) = __real_p33_and_1byte;
-void (* volatile __real_p33_or_1byte_ptr)(u16, u8) = __real_p33_or_1byte;
-void (* volatile __real_p33_tx_1byte_ptr)(u16, u8) = __real_p33_tx_1byte;
-u8 (* volatile __real_p33_rx_1byte_ptr)(u16) = __real_p33_rx_1byte;
-void (* volatile __real_P33_CON_SET_ptr)(u16, u8, u8, u8) = __real_P33_CON_SET;
+void p33_xor_1byte(u16 addr, u8 data0) {
+    void (* volatile real_func)(u16, u8) = (void (* volatile)(u16, u8))0x1123cc;
+    real_func(addr, data0);
+}
 
-u8 __wrap_p33_buf(u8 buf) { return __real_p33_buf_ptr(buf); }
-void __wrap_p33_xor_1byte(u16 addr, u8 data0) { __real_p33_xor_1byte_ptr(addr, data0); }
-void __wrap_p33_and_1byte(u16 addr, u8 data0) { __real_p33_and_1byte_ptr(addr, data0); }
-void __wrap_p33_or_1byte(u16 addr, u8 data0) { __real_p33_or_1byte_ptr(addr, data0); }
-void __wrap_p33_tx_1byte(u16 addr, u8 data0) { __real_p33_tx_1byte_ptr(addr, data0); }
-u8 __wrap_p33_rx_1byte(u16 addr) { return __real_p33_rx_1byte_ptr(addr); }
-void __wrap_P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) { __real_P33_CON_SET_ptr(addr, start, len, data); }
+void p33_and_1byte(u16 addr, u8 data0) {
+    void (* volatile real_func)(u16, u8) = (void (* volatile)(u16, u8))0x1111f0;
+    real_func(addr, data0);
+}
+
+void p33_or_1byte(u16 addr, u8 data0) {
+    void (* volatile real_func)(u16, u8) = (void (* volatile)(u16, u8))0x1111a6;
+    real_func(addr, data0);
+}
+
+void p33_tx_1byte(u16 addr, u8 data0) {
+    void (* volatile real_func)(u16, u8) = (void (* volatile)(u16, u8))0x1110c8;
+    real_func(addr, data0);
+}
+
+u8 p33_rx_1byte(u16 addr) {
+    u8 (* volatile real_func)(u16) = (u8 (* volatile)(u16))0x11111c;
+    return real_func(addr);
+}
+
+void P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) {
+    void (* volatile real_func)(u16, u8, u8, u8) = (void (* volatile)(u16, u8, u8, u8))0x112418;
+    real_func(addr, start, len, data);
+}
