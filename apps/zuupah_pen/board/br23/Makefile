@@ -179,6 +179,7 @@ LFLAGS := \
 	--plugin-opt=-enable-ipra=true \
 	--plugin-opt=mcpu=r3 \
 	--plugin-opt=-global-merge-on-const \
+	--plugin-opt=-mlong-calls \
 	--sort-common \
 	--gc-sections \
 	--allow-multiple-definition \
