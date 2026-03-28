@@ -87,6 +87,15 @@ void P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) {
     real_func(addr, start, len, data);
 }
 
+/* spi_get_port — ROM at 0x1117f8, ~13 MB from Flash code → 23-bit overflow.
+ * board_set_soft_poweroff (Flash) calls this to learn which SPI port drives
+ * the external Flash, so it can protect the right GPIO pins during power-off.
+ * Provide a Flash-resident trampoline that reaches ROM via 32-bit pointer.   */
+u32 spi_get_port(void) {
+    u32 (* volatile fn)(void) = (u32 (* volatile)(void))0x1117f8u;
+    return fn();
+}
+
 /* ── Custom C implementations for gpio / pmu_analog RAM stubs ───────── */
 /*                                                                         */
 /* Problem: pmu_analog.c (inside cpu.a/btctrler.a) has functions in      */
