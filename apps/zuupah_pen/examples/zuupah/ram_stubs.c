@@ -96,6 +96,14 @@ u32 spi_get_port(void) {
     return fn();
 }
 
+/* get_sfc_bit_mode — STATIC in power_port.c (LTO keeps in .volatile_ram_code/RAM).
+ * board_set_soft_poweroff (Flash) calls it to decide whether to protect the
+ * quad-SPI WP/HOLD pins during power-off.  Not in ROM.
+ * AC635N always uses Quad-SPI (4-bit) flash — return 4 unconditionally.     */
+u32 get_sfc_bit_mode(void) {
+    return 4;
+}
+
 /* ── Custom C implementations for gpio / pmu_analog RAM stubs ───────── */
 /*                                                                         */
 /* Problem: pmu_analog.c (inside cpu.a/btctrler.a) has functions in      */
