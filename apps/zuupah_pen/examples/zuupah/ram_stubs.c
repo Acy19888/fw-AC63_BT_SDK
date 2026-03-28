@@ -89,45 +89,82 @@ void P33_CON_SET(u16 addr, u8 start, u8 len, u8 data) {
     real_func(addr, start, len, data);
 }
 
-/* ── LTO C-trampolines for GPIO (RAM) functions ───────────────────────── */
+/* ── Custom C implementations for RAM functions ─────────────────────── */
 /* Precompiled LLVM IR in cpu.a/system.a contains direct calls to gpio_   */
-/* Since these functions reside in .volatile_ram_code, jumping to them    */
-/* from .text exceeds 23 bits. We override them and use their __gpio_     */
-/* internal aliases via 32-bit volatile pointers.                         */
+/* and delay_nus. Since these reside in .volatile_ram_code, jumping to    */
+/* them from .text exceeds 23 bits. We reimplement them cleanly in .text  */
+/* using hardware registers directly, removing the need for library calls */
 
-#include "generic/gpio.h"
+#include "asm/br23.h"
+
+static inline JL_PORT_FLASH_TypeDef *get_gpio_port(unsigned int gpio) {
+    switch (gpio / 16) {
+        case 0: return JL_PORTA;
+        case 1: return JL_PORTB;
+        case 2: return JL_PORTC;
+        case 3: return JL_PORTD;
+        default: return (JL_PORT_FLASH_TypeDef *)0;
+    }
+}
 
 int gpio_direction_input(unsigned int gpio) {
-    int (* volatile real_func)(unsigned int) = __gpio_direction_input;
-    return real_func(gpio);
+    JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
+    if (!port) return -1;
+    port->DIR |= (1 << (gpio % 16));
+    return 0;
 }
 
 int gpio_direction_output(unsigned int gpio, int value) {
-    int (* volatile real_func)(unsigned int, int) = __gpio_direction_output;
-    return real_func(gpio, value);
+    JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
+    if (!port) return -1;
+    if (value) port->OUT |= (1 << (gpio % 16));
+    else       port->OUT &= ~(1 << (gpio % 16));
+    port->DIR &= ~(1 << (gpio % 16));
+    return 0;
 }
 
 int gpio_set_pull_up(unsigned int gpio, int value) {
-    int (* volatile real_func)(unsigned int, int) = __gpio_set_pull_up;
-    return real_func(gpio, value);
+    JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
+    if (!port) return -1;
+    if (value) port->PU |= (1 << (gpio % 16));
+    else       port->PU &= ~(1 << (gpio % 16));
+    return 0;
 }
 
 int gpio_set_pull_down(unsigned int gpio, int value) {
-    int (* volatile real_func)(unsigned int, int) = __gpio_set_pull_down;
-    return real_func(gpio, value);
+    JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
+    if (!port) return -1;
+    if (value) port->PD |= (1 << (gpio % 16));
+    else       port->PD &= ~(1 << (gpio % 16));
+    return 0;
 }
 
 int gpio_set_hd(unsigned int gpio, int value) {
-    int (* volatile real_func)(unsigned int, int) = __gpio_set_hd;
-    return real_func(gpio, value);
+    JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
+    if (!port) return -1;
+    if (value) port->HD |= (1 << (gpio % 16));
+    else       port->HD &= ~(1 << (gpio % 16));
+    return 0;
 }
 
 int gpio_set_die(unsigned int gpio, int value) {
-    int (* volatile real_func)(unsigned int, int) = __gpio_set_die;
-    return real_func(gpio, value);
+    JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
+    if (!port) return -1;
+    if (value) port->DIE |= (1 << (gpio % 16));
+    else       port->DIE &= ~(1 << (gpio % 16));
+    return 0;
 }
 
 int gpio_read(unsigned int gpio) {
-    int (* volatile real_func)(unsigned int) = __gpio_read;
-    return real_func(gpio);
+    JL_PORT_FLASH_TypeDef *port = get_gpio_port(gpio);
+    if (!port) return 0;
+    return !!(port->IN & (1 << (gpio % 16)));
+}
+
+void delay_nus(unsigned int nus) {
+    /* Rough NOP delay loop for microsecond waits */
+    unsigned int loops = nus * 12;
+    while (loops--) {
+        __asm__ volatile ("nop");
+    }
 }
