@@ -144,6 +144,7 @@ c_SRC_FILES := \
 	../../../../apps/zuupah_pen/examples/zuupah/ram_stubs.c \
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_ble.c \
 	../../../../apps/zuupah_pen/examples/zuupah/zuupah_spp.c \
+	../../../../apps/spp_and_le/app_main.c \
 	../../../../apps/spp_and_le/config/lib_btctrler_config.c \
 	../../../../apps/spp_and_le/config/lib_btstack_config.c \
 	../../../../apps/spp_and_le/config/lib_driver_config.c \
@@ -163,9 +164,11 @@ c_SRC_FILES := \
 	../../../../apps/common/third_party_profile/jieli/gatt_common/le_gatt_common.c \
 	../../../../apps/common/third_party_profile/jieli/gatt_common/le_gatt_server.c \
 	../../../../apps/common/third_party_profile/common/custom_cfg.c \
+	../../../../apps/common/device/key/key_driver.c \
 	../../../../cpu/br23/adc_api.c \
 	../../../../cpu/br23/setup.c \
 	../../../../cpu/br23/clock_manager.c \
+	../../../../cpu/br23/audio_dec/audio_dec_tone.c \
 	../../../../cpu/br23/audio_dec/tone_player.c \
 	../../../../cpu/br23/charge.c \
 	../../../../cpu/br23/uart_dev.c \
@@ -200,6 +203,7 @@ LFLAGS := \
 	../../../../cpu/br23/liba/system.a \
 	../../../../cpu/br23/liba/btstack.a \
 	../../../../cpu/br23/liba/btctrler.a \
+	../../../../cpu/br23/liba/crypto_toolbox_Osize.a \
 	../../../../cpu/br23/liba/rcsp_stack.a \
 	../../../../cpu/br23/liba/media.a \
 	../../../../cpu/br23/liba/media_app.a \
