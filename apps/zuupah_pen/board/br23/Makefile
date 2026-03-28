@@ -262,6 +262,23 @@ $(OUT_ELF): $(OBJS)
 	$(QUITE) $(LD) -o $(OUT_ELF) $(OBJS) $(LFLAGS) $(LIBPATHS) $(LIBS)
 endif
 
+# ram_stubs.c must NOT be compiled with LTO (-flto).
+# If it were LTO bitcode, the linker might strip section attributes from
+# delay_nus during LTO merging, placing it in .text (Flash) instead of RAM.
+# Compiling without -flto produces a native object whose .volatile_ram_code
+# section is always preserved, making the linker-script alias
+#   delay_nus.636 = delay_nus;
+# redirect the LTO-promoted delay_nus.636 to a real RAM address.
+RAM_STUBS_SRC := $(ROOT_PREFIX)/apps/zuupah_pen/examples/zuupah/ram_stubs.c
+RAM_STUBS_OBJ := $(BUILD_DIR)/apps/zuupah_pen/examples/zuupah/ram_stubs.c.o
+NOFLTO_CFLAGS := $(filter-out -flto,$(CFLAGS))
+
+$(RAM_STUBS_OBJ) : $(RAM_STUBS_SRC)
+	$(info +CC [no-lto] $<)
+	$(QUITE) $(MKDIR) $(@D)
+	$(QUITE) $(CC) $(NOFLTO_CFLAGS) -fno-lto $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
+	$(QUITE) $(CC) $(NOFLTO_CFLAGS) -fno-lto $(DEFINES) $(INCLUDES) -c $< -o $@
+
 $(BUILD_DIR)/%.c.o : $(ROOT_PREFIX)/%.c
 	$(info +CC $<)
 	$(QUITE) $(MKDIR) $(@D)

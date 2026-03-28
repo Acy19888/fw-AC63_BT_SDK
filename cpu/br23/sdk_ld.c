@@ -302,10 +302,11 @@ SECTIONS
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
-        /* Note: *(.text.delay_nus*) was removed here.
-         * delay_nus.636 stays in .text (Flash) alongside __real_ldo13_on;
-         * Flash→Flash 23-bit jumps are in range. External ldo13_on calls
-         * are wrapped to __wrap_ldo13_on (RAM) which uses its own RAM delay_nus. */
+        /* ram_stubs.c compiles delay_nus with -fno-lto → native .text.delay_nus
+         * section → placed here in RAM.  delay_nus.636 (LTO-promoted static from
+         * pmu_analog.c) is then aliased to delay_nus via the script assignment
+         * below, keeping ldo13_on→delay_nus.636 a RAM→RAM 23-bit jump. */
+        *(.text.delay_nus*)
         *(.chargebox_code)
         *(.os_critical_code)
         *(.chargebox_code)
@@ -471,17 +472,18 @@ SECTIONS
 #include "driver/cpu/br23/driver_lib.ld"
 
 /* ── PI32V2 LTO static-promotion alias ──────────────────────────────────
- * With --wrap=ldo13_on the original ldo13_on is renamed __real_ldo13_on
- * and its section attribute is lost, so it lands in .text (Flash).
- * delay_nus.636 (the LTO-promoted static helper it calls) also lands in
- * .text (Flash) naturally.  Flash→Flash 23-bit jumps are always in range,
- * so we must NOT redirect delay_nus.636 to our RAM-resident delay_nus —
- * that would create a Flash→RAM gap of ~512 MB that cannot fit in 23 bits.
+ * pmu_analog.c (inside cpu.a) defines a static delay_nus.  During LTO,
+ * this conflicts with our external delay_nus (ram_stubs.c) and gets
+ * promoted to the unique name delay_nus.636, losing its section attribute.
+ * Without the attribute the linker places delay_nus.636 in .text (Flash).
+ * ldo13_on (in .volatile_ram_code, RAM) then generates a 23-bit jump to
+ * Flash that overflows → R_PI32V2_LONG_JUMP_23M2 relocation truncated.
  *
- * External callers of ldo13_on are redirected to __wrap_ldo13_on (RAM),
- * which calls our own delay_nus (also RAM) — RAM→RAM, always in range.
- * The delay_nus.636 = delay_nus assignment below is intentionally removed.
- * ──────────────────────────────────────────────────────────────────────── */
+ * Fix: compile ram_stubs.c with -fno-lto so delay_nus is a real native
+ * symbol in .text.delay_nus (placed in RAM by *(.text.delay_nus*) above).
+ * This assignment then redirects delay_nus.636 to that RAM address,
+ * making the ldo13_on→delay_nus.636 call RAM→RAM and always in range. */
+delay_nus.636 = delay_nus;
 
 text_begin  = ADDR(.text) ;
 text_size   = SIZEOF(.text) ;
