@@ -165,6 +165,7 @@ c_SRC_FILES := \
 	../../../../apps/common/third_party_profile/jieli/gatt_common/le_gatt_server.c \
 	../../../../apps/common/third_party_profile/common/custom_cfg.c \
 	../../../../apps/common/device/key/key_driver.c \
+	../../../../apps/common/audio/sine_make.c \
 	../../../../cpu/br23/adc_api.c \
 	../../../../cpu/br23/setup.c \
 	../../../../cpu/br23/clock_manager.c \

@@ -317,6 +317,32 @@ void power_set_soft_poweroff(void)
  * for this config), so we provide the symbol here.                          */
 int is_pwm_led_on(void) { return 0; }
 
+/* ── update_result_deal ──────────────────────────────────────────────────────
+ * Defined in apps/common/update/update.c (complex includes, not in our SRC).
+ * Called from app_main.c on boot to check if a firmware update completed.
+ * Return 0 = no update was in progress; pen does not use OTA updates.       */
+int update_result_deal(void) { return 0; }
+
+/* ── adkey_init / adkey_scan_para ───────────────────────────────────────────
+ * TCFG_ADKEY_ENABLE is nominally disabled in app_config.h, but LTO from
+ * key_driver.c still emits references (board_ac635n_fmy_cfg.h sets it to 1
+ * before app_config.h overrides it; the bitcode retains both paths).
+ * The zuupah pen has no ADC key — stub adkey_init to return -1 (no key).    */
+#include "system/device/adkey.h"
+#include "device/key_driver.h"
+int adkey_init(const struct adkey_platform_data *adkey_data)
+{ (void)adkey_data; return -1; }
+
+struct key_driver_para adkey_scan_para = { .scan_time = 10 };
+
+/* ── decode_task ─────────────────────────────────────────────────────────────
+ * Global audio decoder task handle; defined in cpu/br23/audio_dec/audio_dec.c
+ * (not in our SRC — too many complex media includes).  audio_dec_tone.c uses
+ * audio_decoder_task_add_wait / del_wait with this handle.  Zero-initialize:
+ * tone_player runs without a full audio decoder task on this pen.            */
+#include "media/audio_decoder.h"
+struct audio_decoder_task decode_task = {0};
+
 /* ldo13_on: provided by cpu.a (pmu_analog.c).
  * With --plugin-opt=-inline-normal-into-special-section=true the LTO backend
  * inlines delay_nus into ldo13_on so both stay in .volatile_ram_code.
