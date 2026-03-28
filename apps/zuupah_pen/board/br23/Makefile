@@ -91,6 +91,7 @@ DEFINES := \
 	-DUSER_SUPPORT_PROFILE_SPP=1 \
 	-DCONFIG_BT_BREDR_ENABLE \
 	-DCONFIG_BLE_ENABLE \
+	-DCONFIG_LITE_AUDIO \
 	$(EXT_CFLAGS) \
 
 # ─── Include Paths ───────────────────────────────────────────────────────────
