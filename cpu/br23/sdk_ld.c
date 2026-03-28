@@ -468,14 +468,6 @@ SECTIONS
 #include "update/update.ld"
 #include "driver/cpu/br23/driver_lib.ld"
 
-/* ── PI32V2 LTO static-promotion alias ──────────────────────────────────
- * pmu_analog.c (inside cpu.a) defines a static delay_nus.  During LTO,
- * this conflicts with our external delay_nus (ram_stubs.c) and gets
- * promoted to the unique name delay_nus.636.  Our delay_nus lives in
- * .text (Flash) — ldo13_on/___real_ldo13_on also ends up in .text (Flash)
- * after --wrap renames it.  This alias ensures delay_nus.636 resolves to
- * the same Flash address, keeping any residual Flash→Flash call in range. */
-delay_nus.636 = delay_nus;
 
 text_begin  = ADDR(.text) ;
 text_size   = SIZEOF(.text) ;
