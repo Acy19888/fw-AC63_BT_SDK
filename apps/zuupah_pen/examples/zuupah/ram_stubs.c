@@ -285,6 +285,15 @@ void port_protect(u16 *port_group, u32 port_num)
  * TCFG_AUDIO_ENABLE is defined.  Stub prevents Flash→RAM overflow.        */
 void dac_power_off(void) {}
 
+/* norflash_set_write_protect — controls flash WP pin / status register.
+ * Defined in flash_wp_otp.c (cpu.a LTO bitcode, lands in .text = Flash).
+ * Internally calls flash_addr2cpu_addr which is STATIC in .volatile_ram_code
+ * (RAM) — the Flash→RAM 23-bit R_PI32V2_LONG_JUMP_23M2 relocation overflows.
+ * The static symbol cannot be overridden directly; override the PUBLIC caller
+ * instead.  The pen never programs the NOR flash at runtime, so disabling
+ * write-protect management is safe.                                        */
+int norflash_set_write_protect(u8 enable) { (void)enable; return 0; }
+
 /* ── power_set_soft_poweroff ─────────────────────────────────────────────── */
 /* Defined in power_hw.c.o (now removed from cpu.a).  Called from Flash     */
 /* (zuupah_main.c LTO), so no AT_VOLATILE_RAM_CODE needed.  Spin forever:   */
