@@ -302,9 +302,8 @@ SECTIONS
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
-        /* delay_nus is now in .text (Flash); *(.text.delay_nus*) is kept as a
-         * no-op wildcard in case any variant ever needs RAM placement again. */
-        *(.text.delay_nus*)
+
+
         *(.chargebox_code)
         *(.os_critical_code)
         *(.chargebox_code)
