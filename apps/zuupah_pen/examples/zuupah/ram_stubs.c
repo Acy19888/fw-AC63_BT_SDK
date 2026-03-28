@@ -1,12 +1,13 @@
 /*
- * ram_stubs.c — Volatile-RAM trampolines for functions that cpu.a / system.a
- * call from .volatile_ram_code (RAM, ~0x0000) but that LTO would otherwise
- * place in .text (Flash, ~0x1E00xxxx).  The direct RAM→Flash 23-bit jump
- * (R_PI32V2_LONG_JUMP_23M2) exceeds the ±8 MB reach of the PI32V2 ISA.
+ * ram_stubs.c — Stubs and trampolines for the zuupah pen app.
  *
- * Placing our own definitions in AT_VOLATILE_RAM_CODE keeps caller and callee
- * in the same address space.  --allow-multiple-definition lets our copy win
- * over the library copies.
+ * The JieLi SDK handles RAM↔Flash call-range issues via:
+ *   --plugin-opt=-inline-normal-into-special-section=true  (LTO inlines)
+ *   --dont-complain-call-overflow                          (suppress errors)
+ *   --allow-multiple-definition                            (our stubs win)
+ *
+ * Stubs here are for: p33 ROM trampolines (fixed ROM addresses), GPIO
+ * implementations, power-management no-ops, and flash interface overrides.
  */
 
 #include "system/includes.h"
@@ -325,20 +326,7 @@ void power_set_soft_poweroff(void)
     while (1);
 }
 
-/* ── ldo13_on ────────────────────────────────────────────────────────────── */
-/* power_hw.c.o is removed from cpu.a in CI (ar d cpu.a power_hw.c.o).      */
-/* That eliminates pmu_analog.c's ldo13_on + its static delay_nus from the  */
-/* LTO blob entirely — no more Flash→RAM 23-bit overflow.  Our version here  */
-/* (compiled -fno-lto, AT_VOLATILE_RAM_CODE) becomes the sole definition.   */
-/* LDO13_EN(1) = p33_or_1byte(0x00, 0x04) via ROM at 0x1111a6              */
-AT_VOLATILE_RAM_CODE __attribute__((noinline))
-void ldo13_on(unsigned int udelay)
-{
-    void (* volatile fn)(unsigned short, unsigned char) =
-        (void (* volatile)(unsigned short, unsigned char))0x1111a6u;
-    fn(0x00u, 0x04u);   /* P3_ANA_CON0 bit 2 → enable LDO13 */
-    if (udelay) {
-        volatile unsigned int loops = udelay * 12u;
-        while (loops--) { __asm__ volatile("nop"); }
-    }
-}
+/* ldo13_on: provided by cpu.a (pmu_analog.c).
+ * With --plugin-opt=-inline-normal-into-special-section=true the LTO backend
+ * inlines delay_nus into ldo13_on so both stay in .volatile_ram_code.
+ * --dont-complain-call-overflow suppresses any residual range errors. */

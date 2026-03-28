@@ -66,7 +66,6 @@ CFLAGS := \
 	-fallow-pointer-null \
 	-fprefer-gnu-section \
 	-fms-extensions \
-	-ffunction-sections \
 	-w \
 
 # ─── Defines ─────────────────────────────────────────────────────────────────
@@ -172,15 +171,30 @@ c_SRC_FILES := \
 	../../../../cpu/br23/uart_dev.c \
 
 # ─── Linker Flags ────────────────────────────────────────────────────────────
+# Aligned with spp_and_le reference app (the correct JieLi SDK flags).
+# Key additions vs our previous hacks:
+#   --dont-complain-call-overflow  → suppresses PI32V2 23-bit range errors
+#   -inline-normal-into-special-section=true → LTO inlines delay_nus INTO
+#     ldo13_on (both end up in .volatile_ram_code) → no cross-section call
 LFLAGS := \
 	--plugin-opt=-pi32v2-always-use-itblock=false \
 	--plugin-opt=-enable-ipra=true \
+	--plugin-opt=-pi32v2-merge-max-offset=4096 \
+	--plugin-opt=-pi32v2-enable-simd=true \
 	--plugin-opt=mcpu=r3 \
 	--plugin-opt=-global-merge-on-const \
-	--plugin-opt=-code-model=large \
+	--plugin-opt=-inline-threshold=5 \
+	--plugin-opt=-inline-max-allocated-size=32 \
+	--plugin-opt=-inline-normal-into-special-section=true \
+	--plugin-opt=-dont-used-symbol-list=malloc,free,sprintf,printf,puts,putchar \
+	--plugin-opt=save-temps \
+	--plugin-opt=-pi32v2-enable-rep-memop \
+	--plugin-opt=-warn-stack-size=256 \
 	--sort-common \
-	--gc-sections \
+	--dont-complain-call-overflow \
 	--allow-multiple-definition \
+	--plugin-opt=-used-symbol-file=../../../../cpu/br23/sdk_used_list.used \
+	--gc-sections \
 	--start-group \
 	../../../../cpu/br23/liba/cpu.a \
 	../../../../cpu/br23/liba/system.a \
@@ -209,8 +223,7 @@ OBJS      := $(c_OBJS)
 DEP_FILES := $(OBJS:%.o=%.d)
 OBJS      := $(addprefix $(BUILD_DIR)/, $(OBJS:$(ROOT_PREFIX)/%=%))
 DEP_FILES := $(addprefix $(BUILD_DIR)/, $(DEP_FILES:$(ROOT_PREFIX)/%=%))
-# irq_stubs.c.o is compiled without INCLUDES; add it explicitly after the
-# regular objects so --allow-multiple-definition gives it priority.
+# irq_stubs.c.o is compiled without INCLUDES; add it explicitly at the end.
 OBJS      += $(BUILD_DIR)/apps/zuupah_pen/examples/zuupah/irq_stubs.c.o
 
 VERBOSE ?= 0
