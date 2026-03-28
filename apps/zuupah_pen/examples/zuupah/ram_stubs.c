@@ -45,6 +45,15 @@ int (* volatile os_mutex_create_ptr)(OS_MUTEX *) = os_mutex_create;
 int (* volatile os_mutex_pend_ptr)(OS_MUTEX *, int) = os_mutex_pend;
 int (* volatile os_mutex_post_ptr)(OS_MUTEX *) = os_mutex_post;
 
+/* crc16.c (and other Flash/LTO code) calls os_mutex_pend/post as direct
+ * symbol references — NOT through the _ptr macro path.  The real functions
+ * live in .os_code (RAM); the Flash→RAM 23-bit jump overflows.
+ * Flash stubs always succeed: the BT stack is event-driven / single-task-
+ * queue, so concurrent CRC access is not possible in practice.           */
+int os_mutex_create(OS_MUTEX *mutex) { (void)mutex; return 0; }
+int os_mutex_pend  (OS_MUTEX *mutex, int timeout) { (void)mutex; (void)timeout; return 0; }
+int os_mutex_post  (OS_MUTEX *mutex) { (void)mutex; return 0; }
+
 /* ── LTO C-trampolines for p33 (ROM) functions ────────────────────────── */
 /* Precompiled LLVM IR in cpu.a contains direct calls to p33_or_1byte etc.*/
 /* These jumps fail the 23-bit range check from .text.                    */
