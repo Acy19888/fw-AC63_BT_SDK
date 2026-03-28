@@ -165,6 +165,10 @@ c_SRC_FILES := \
 	../../../../cpu/br23/adc_api.c \
 	../../../../cpu/br23/setup.c \
 	../../../../cpu/br23/clock_manager.c \
+	../../../../cpu/br23/audio_common/app_audio.c \
+	../../../../cpu/br23/audio_dec/audio_dec.c \
+	../../../../cpu/br23/audio_dec/audio_dec_tone.c \
+	../../../../cpu/br23/audio_dec/tone_player.c \
 	../../../../cpu/br23/charge.c \
 	../../../../cpu/br23/uart_dev.c \
 
@@ -174,6 +178,7 @@ LFLAGS := \
 	--plugin-opt=-enable-ipra=true \
 	--plugin-opt=mcpu=r3 \
 	--plugin-opt=-global-merge-on-const \
+	--plugin-opt=-code-model=large \
 	--sort-common \
 	--gc-sections \
 	--allow-multiple-definition \
