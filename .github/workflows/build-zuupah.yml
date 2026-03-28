@@ -89,13 +89,28 @@ jobs:
           cd apps/zuupah_pen/board/br23
           ulimit -n 8096
 
-          # stub-Skripte für post-script-Tools die nicht in der Toolchain sind
-          # (download.sh-Fehler ignoriert make durch '-' Präfix, aber Stubs
-          #  sorgen für saubere Log-Ausgabe)
+          # ── Toolchain-Symlinks für neues Layout (common/bin + pi32v2/bin) ────────
+          # lto-wrapper (in common/bin) ruft 'ld', 'nm', 'strip' auf —
+          # diese liegen im neuen Layout in pi32v2/bin, nicht in common/bin.
+          # Symlinks lösen das, ohne die Toolchain zu verändern.
+          if [ -f /opt/jieli/common/bin/lto-wrapper ] && [ -d /opt/jieli/pi32v2/bin ]; then
+            echo "Neues Toolchain-Layout erkannt: Erstelle Symlinks common/bin → pi32v2/bin"
+            for tool in ld nm strip; do
+              SRC="/opt/jieli/pi32v2/bin/$tool"
+              DST="/opt/jieli/common/bin/$tool"
+              if [ -f "$SRC" ] && [ ! -f "$DST" ]; then
+                sudo ln -sf "$SRC" "$DST"
+                echo "  ✓ $DST → $SRC"
+              fi
+            done
+          fi
+
+          # ── Stubs für post-script-Tools (download.sh) ────────────────────────
+          # make ignoriert Fehler im post-script durch '-' Präfix im Makefile.
           sudo mkdir -p /opt/utils
           for stub in /usr/local/bin/host-client /opt/utils/strip-ini /usr/local/bin/lz4_packet; do
-            if ! command -v "$(basename $stub)" >/dev/null 2>&1 && [ ! -f "$stub" ]; then
-              printf '#!/bin/sh\necho "[stub] %s $@"\n' "$(basename $stub)" | sudo tee "$stub" > /dev/null
+            if [ ! -f "$stub" ]; then
+              printf '#!/bin/sh\necho "[stub] %s $*"\n' "$(basename $stub)" | sudo tee "$stub" > /dev/null
               sudo chmod +x "$stub"
             fi
           done
