@@ -171,15 +171,33 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
-/* delay_nus and __wrap_ldo13_on removed.
- *
- * --wrap=ldo13_on strips the .volatile_ram_code section attribute from
- * ldo13_on (renaming it __real_ldo13_on places it in .text / Flash).
- * Any call to delay_nus from Flash then generates a 23-bit relocation
- * that overflows regardless of whether delay_nus is in RAM or Flash.
- *
- * The library's own ldo13_on and its static delay_nus both carry the
- * .volatile_ram_code attribute in their LTO bitcode.  Without an external
- * delay_nus causing a name conflict, LTO leaves them in RAM and the
- * RAM->RAM call is always within the 23-bit range.  Let the library
- * handle ldo13_on entirely on its own. */
+/* ── ldo13_on — override the library version with a RAM-resident copy ─── */
+/* JieLi LTO strips .volatile_ram_code from PUBLIC (extern) symbols during  */
+/* native code generation: ldo13_on lands in .text (Flash) even though its  */
+/* bitcode has the section attribute.  Its static delay_nus helper stays in  */
+/* RAM (internal symbols keep the attribute), producing a Flash→RAM 23-bit   */
+/* overflow.                                                                  */
+/*                                                                            */
+/* Fix: define ldo13_on ourselves in this non-LTO translation unit           */
+/* (ram_stubs.c is compiled with -fno-lto).  The section attribute is        */
+/* honoured by the regular compiler, so the function is placed in            */
+/* .volatile_ram_code (RAM).  --allow-multiple-definition makes our copy win */
+/* over the library version.  The inline busy-wait avoids any call to the    */
+/* library's private delay_nus (unreachable from outside the LTO blob).      */
+/*                                                                            */
+/* LDO13_EN(1) = P33_TX_NBIT(P3_ANA_CON0, BIT(2), 1)                        */
+/*             = p33_or_1byte(0x00, 0x04)  [ROM at 0x1111a6]                 */
+AT_VOLATILE_RAM_CODE __attribute__((noinline))
+void ldo13_on(unsigned int udelay)
+{
+    /* Call p33_or_1byte from ROM (always reachable, even when Flash is off) */
+    void (* volatile fn)(unsigned short, unsigned char) =
+        (void (* volatile)(unsigned short, unsigned char))0x1111a6u;
+    fn(0x00u, 0x04u);   /* set P3_ANA_CON0 bit 2 → enable LDO13 */
+
+    if (udelay) {
+        /* Inline busy-wait: no external call across the RAM/Flash boundary. */
+        volatile unsigned int loops = udelay * 12u;
+        while (loops--) { __asm__ volatile("nop"); }
+    }
+}
