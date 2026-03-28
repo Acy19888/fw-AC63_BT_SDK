@@ -302,6 +302,11 @@ SECTIONS
 
         *(.flushinv_icache)
         *(.volatile_ram_code)
+        /* LTO promotes static delay_nus to delay_nus.636 (no section attr).
+         * With -ffunction-sections it lands in .text.delay_nus or similar.
+         * Keep ALL delay_nus variants in RAM so the ldo13_on→delay_nus
+         * call (RAM→RAM) stays within the 23-bit PI32V2 jump range. */
+        *(.text.delay_nus*)
         *(.chargebox_code)
         *(.os_critical_code)
         *(.chargebox_code)
