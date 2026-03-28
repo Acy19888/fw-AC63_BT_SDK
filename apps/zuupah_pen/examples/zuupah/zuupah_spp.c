@@ -274,7 +274,7 @@ static void zuupah_spp_receive_cbk(void *priv, u8 *data, u16 len)
                 /* fprintf not in JieLi libc — format first, then fwrite */
                 char fbuf[256];
                 int flen = snprintf(fbuf, sizeof(fbuf), "file=%s\n", g_filename);
-                if (flen > 0) { fwrite(fbuf, 1, (size_t)flen, mf); }
+                if (flen > 0) { fwrite(mf, fbuf, (u32)flen); } /* JieLi: fwrite(FILE*, buf, len) */
                 fclose(mf);
             }
 
