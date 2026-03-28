@@ -180,8 +180,6 @@ LFLAGS := \
 	--plugin-opt=mcpu=r3 \
 	--plugin-opt=-global-merge-on-const \
 	--plugin-opt=-code-model=large \
-	--plugin-opt=-function-sections \
-	--plugin-opt=-error-limit=0 \
 	--sort-common \
 	--gc-sections \
 	--allow-multiple-definition \
