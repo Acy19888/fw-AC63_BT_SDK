@@ -152,3 +152,4 @@ jobs:
           ls -lh firmware_output/ >> $GITHUB_STEP_SUMMARY || echo "Keine Dateien" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Download:** Gehe zu Actions → Diesen Run → Artifacts → zuupah-pen-firmware" >> $GITHUB_STEP_SUMMARY
+
