@@ -212,6 +212,9 @@ OBJS      := $(c_OBJS)
 DEP_FILES := $(OBJS:%.o=%.d)
 OBJS      := $(addprefix $(BUILD_DIR)/, $(OBJS:$(ROOT_PREFIX)/%=%))
 DEP_FILES := $(addprefix $(BUILD_DIR)/, $(DEP_FILES:$(ROOT_PREFIX)/%=%))
+# irq_stubs.c.o is compiled without INCLUDES; add it explicitly after the
+# regular objects so --allow-multiple-definition gives it priority.
+OBJS      += $(BUILD_DIR)/apps/zuupah_pen/examples/zuupah/irq_stubs.c.o
 
 VERBOSE ?= 0
 ifeq ($(VERBOSE), 1)
@@ -277,6 +280,18 @@ $(RAM_STUBS_OBJ) : $(RAM_STUBS_SRC)
 	$(QUITE) $(MKDIR) $(@D)
 	$(QUITE) $(CC) $(NOFLTO_CFLAGS) -fno-lto $(DEFINES) $(INCLUDES) -MM -MT $@ $< -o $(@:.o=.d)
 	$(QUITE) $(CC) $(NOFLTO_CFLAGS) -fno-lto $(DEFINES) $(INCLUDES) -c $< -o $@
+
+# irq_stubs.c must also be compiled without LTO and WITHOUT the standard
+# INCLUDES (omit cpu.h to avoid static-inline redefinition of local_irq_*).
+# Only the bare br23 csfr header path is needed for the IPMASK address.
+IRQ_STUBS_SRC := $(ROOT_PREFIX)/apps/zuupah_pen/examples/zuupah/irq_stubs.c
+IRQ_STUBS_OBJ := $(BUILD_DIR)/apps/zuupah_pen/examples/zuupah/irq_stubs.c.o
+
+$(IRQ_STUBS_OBJ) : $(IRQ_STUBS_SRC)
+	$(info +CC [no-lto,no-cpu-h] $<)
+	$(QUITE) $(MKDIR) $(@D)
+	$(QUITE) $(CC) $(NOFLTO_CFLAGS) -fno-lto $(DEFINES) -MM -MT $@ $< -o $(@:.o=.d)
+	$(QUITE) $(CC) $(NOFLTO_CFLAGS) -fno-lto $(DEFINES) -c $< -o $@
 
 $(BUILD_DIR)/%.c.o : $(ROOT_PREFIX)/%.c
 	$(info +CC $<)
