@@ -127,6 +127,17 @@ jobs:
             echo "✗ app.bin nicht gefunden in cpu/br23/tools/"
           fi
 
+          # Flash-Paket: isd_config.ini (CI-generiert), loader, uboot
+          # Diese Dateien werden für isd_download.exe auf Windows benötigt
+          cp cpu/br23/tools/isd_config.ini firmware_output/isd_config.ini && \
+            echo "✓ isd_config.ini kopiert" || echo "✗ isd_config.ini fehlt"
+          cp cpu/br23/tools/br23loader.bin firmware_output/br23loader.bin && \
+            echo "✓ br23loader.bin: $(wc -c < firmware_output/br23loader.bin) bytes" || echo "✗ br23loader.bin fehlt"
+          cp cpu/br23/tools/uboot.boot firmware_output/uboot.boot && \
+            echo "✓ uboot.boot: $(wc -c < firmware_output/uboot.boot) bytes" || echo "✗ uboot.boot fehlt"
+          cp cpu/br23/tools/flash_params.bin firmware_output/flash_params.bin 2>/dev/null && \
+            echo "✓ flash_params.bin kopiert" || echo "✗ flash_params.bin fehlt (optional)"
+
           # jl_isd.fw suchen (Linux Build Output von host-client)
           FW=$(find cpu/br23/tools -name "jl_isd*.fw" -o -name "jl_isd*.ufw" 2>/dev/null | head -1)
           if [ -n "$FW" ]; then
