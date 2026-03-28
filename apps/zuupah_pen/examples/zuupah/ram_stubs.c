@@ -171,6 +171,15 @@ int gpio_read(unsigned int gpio) {
     return !!(port->IN & (1 << (gpio % 16)));
 }
 
+/* ── power_set_soft_poweroff ─────────────────────────────────────────────── */
+/* Defined in power_hw.c.o (now removed from cpu.a).  Called from Flash     */
+/* (zuupah_main.c LTO), so no AT_VOLATILE_RAM_CODE needed.  Spin forever:   */
+/* the hardware WDT resets the chip after ~100 ms — clean shutdown.          */
+void power_set_soft_poweroff(void)
+{
+    while (1);
+}
+
 /* ── ldo13_on ────────────────────────────────────────────────────────────── */
 /* power_hw.c.o is removed from cpu.a in CI (ar d cpu.a power_hw.c.o).      */
 /* That eliminates pmu_analog.c's ldo13_on + its static delay_nus from the  */
