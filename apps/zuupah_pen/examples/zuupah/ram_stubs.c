@@ -225,6 +225,53 @@ void power_keep_dacvdd_en(u8 en) { (void)en; }
  * wakeup sources are never armed.                                          */
 void power_wakeup_init(const struct wakeup_param *param) { (void)param; }
 
+/* ══ GPIO bulk-register stubs ════════════════════════════════════════════════
+ * board_set_soft_poweroff() (Flash/LTO) calls these to tri-state all GPIO
+ * before soft-poweroff.  On the real chip they live in .volatile_ram_code
+ * so they can run when Flash is unpowered.  Our pen never enters true
+ * soft-poweroff (power_set_callback is a no-op), so plain Flash stubs are
+ * safe and fix the Flash→RAM 23-bit relocation overflow.                   */
+#include "asm/gpio.h"
+#include "asm/power/power_port.h"
+
+u32 gpio_dir(u32 gpio, u32 start, u32 len, u32 dat, enum gpio_op_mode op)
+{ (void)gpio; (void)start; (void)len; (void)dat; (void)op; return 0; }
+
+u32 gpio_set_pu(u32 gpio, u32 start, u32 len, u32 dat, enum gpio_op_mode op)
+{ (void)gpio; (void)start; (void)len; (void)dat; (void)op; return 0; }
+
+u32 gpio_set_pd(u32 gpio, u32 start, u32 len, u32 dat, enum gpio_op_mode op)
+{ (void)gpio; (void)start; (void)len; (void)dat; (void)op; return 0; }
+
+u32 gpio_die(u32 gpio, u32 start, u32 len, u32 dat, enum gpio_op_mode op)
+{ (void)gpio; (void)start; (void)len; (void)dat; (void)op; return 0; }
+
+u32 gpio_dieh(u32 gpio, u32 start, u32 len, u32 dat, enum gpio_op_mode op)
+{ (void)gpio; (void)start; (void)len; (void)dat; (void)op; return 0; }
+
+/* Single-GPIO extras also called from board_set_soft_poweroff /
+ * sleep_enter_callback via the same Flash→RAM path.                        */
+int  gpio_set_direction(u32 gpio, u32 dir)
+{ (void)gpio; (void)dir; return 0; }
+
+u32  gpio_set_dieh(u32 gpio, u32 value)
+{ (void)gpio; (void)value; return 0; }
+
+/* usb_iomode — disconnects the USB DP/DM pads from the USB controller.
+ * Called from board_set_soft_poweroff and sleep_enter_callback (both Flash).
+ * Lives in .volatile_ram_code in the library; Flash stub is sufficient.   */
+void usb_iomode(u32 enable) { (void)enable; }
+
+/* port_protect — marks a GPIO port as "protected" (do not tri-state).
+ * Called from board_set_soft_poweroff (Flash).  No-op: the pen doesn't
+ * enter true soft-poweroff anyway.                                         */
+void port_protect(u16 *port_group, u32 port_num)
+{ (void)port_group; (void)port_num; }
+
+/* dac_power_off — called from sleep_enter_callback (Flash/LTO) when
+ * TCFG_AUDIO_ENABLE is defined.  Stub prevents Flash→RAM overflow.        */
+void dac_power_off(void) {}
+
 /* ── power_set_soft_poweroff ─────────────────────────────────────────────── */
 /* Defined in power_hw.c.o (now removed from cpu.a).  Called from Flash     */
 /* (zuupah_main.c LTO), so no AT_VOLATILE_RAM_CODE needed.  Spin forever:   */
