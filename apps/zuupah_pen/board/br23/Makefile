@@ -146,6 +146,7 @@ INCLUDES := \
 	-I../../../../apps/common/third_party_profile/jieli/gatt_common \
 	-I../../../../apps/common/third_party_profile/jieli/JL_rcsp \
 	-I../../../../apps/common/third_party_profile/jieli/JL_rcsp/rcsp_updata \
+	-I../../../../apps/common/third_party_profile/jieli/JL_rcsp/bt_trans_data \
 	-I../../../../apps/common/third_party_profile/common \
 	-I../../../../include_lib/ai_stack/JL_rcsp \
 	-I../../../../cpu/br23 \
