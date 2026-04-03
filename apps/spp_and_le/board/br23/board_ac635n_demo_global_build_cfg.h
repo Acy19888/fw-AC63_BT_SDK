@@ -9,7 +9,7 @@
 /* Following Macros Affect Periods Of Both Code Compiling And Post-build */
 
 #define CONFIG_DOUBLE_BANK_ENABLE               0       //单双备份选择(若打开了改宏,FLASH结构变为双备份结构，适用于接入第三方协议的OTA， PS: JL-OTA同样支持双备份升级, 需要根据实际FLASH大小同时配置CONFIG_FLASH_SIZE)
-#define CONFIG_APP_OTA_ENABLE                   0       //是否支持RCSP升级(JL-OTA)
+#define CONFIG_APP_OTA_ENABLE                   1       //是否支持RCSP升级(JL-OTA)
 
 #define CONFIG_UPDATE_JUMP_TO_MASK              0   	//配置升级到loader的方式0为直接reset,1为跳转(适用于芯片电源由IO口KEEP住的方案,需要注意检查跳转前是否将使用DMA的硬件模块全部关闭)
 
@@ -39,9 +39,9 @@
 #define CONFIG_SUPPORTED_CHIP_VERSION			A,B,D
 
 //DON'T MODIFY THIS CONFIG EXCEPT SDK PUBLISHER
-#define CONFIG_CHIP_NAME                        AC635N              //除了SDK发布者,请不要修改
+#define CONFIG_CHIP_NAME                        AC6956C             //除了SDK发布者,请不要修改
 //it can be modified before first programming,but keep the same as the original version
-#define CONFIG_PID                              AC635N              //烧写或强制升级之前可以修改,之后升级要保持一致
+#define CONFIG_PID                              Zuupah_Pen          //烧写或强制升级之前可以修改,之后升级要保持一致
 //it can be modified before first programming,but keep the same as the original version
 #define CONFIG_VID                              0.01				//烧写或强制升级之前可以修改,之后升级要保持一致
 
@@ -87,7 +87,7 @@
 //#define CONFIG_VDDIO_LVD_LEVEL                  4 ////VDDIO_LVD挡位，0: 1.9V   1: 2.0V   2: 2.1V   3: 2.2V   4: 2.3V   5: 2.4V   6: 2.5V   7: 2.6V
 
 //with single-bank mode,actual vm size should larger this VM_LEAST_SIZE,and dual bank mode,actual vm size equals this;
-#define CONFIG_VM_LEAST_SIZE                    8K
+#define CONFIG_VM_LEAST_SIZE                    64K
 //config whether erased this area when do a update,1-No Operation,0-Erase
 #define CONFIG_VM_OPT							1
 
