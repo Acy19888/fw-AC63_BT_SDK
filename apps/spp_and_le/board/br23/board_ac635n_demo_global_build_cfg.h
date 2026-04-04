@@ -39,7 +39,10 @@
 #define CONFIG_SUPPORTED_CHIP_VERSION			A,B,D
 
 //DON'T MODIFY THIS CONFIG EXCEPT SDK PUBLISHER
-#define CONFIG_CHIP_NAME                        AC6956C             //除了SDK发布者,请不要修改
+#define CONFIG_CHIP_NAME                        AC693X              //AC695N (AC6956C) uses AC693X for packaging tool compatibility
+// AC695N flash base is 0x1D00000 (not 0x1E00000 like AC635N)
+// Entry offset 0xC0 (not 0x120) → 0x1D00000 + 0xC0 = 0x1D000C0
+#define CONFIG_ENTRY_ADDRESS                    0x1D000C0           //AC695N entry: flash base 0x1D00000 + offset 0xC0
 //it can be modified before first programming,but keep the same as the original version
 #define CONFIG_PID                              Zuupah_Pen          //烧写或强制升级之前可以修改,之后升级要保持一致
 //it can be modified before first programming,but keep the same as the original version

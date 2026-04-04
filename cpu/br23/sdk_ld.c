@@ -63,7 +63,13 @@ PSRAM_BEG      = 0x800000;
 PSRAM_SIZE     = 2M;
 
 
-CODE_BEG   = 0X1E000C0;
+// CONFIG_ENTRY_ADDRESS is set per chip in the board global build cfg:
+//   AC635N: 0x1E00120 (flash base 0x1E00000 + offset 0x120)
+//   AC695N: 0x1D000C0 (flash base 0x1D00000 + offset 0xC0)
+#ifndef CONFIG_ENTRY_ADDRESS
+#define CONFIG_ENTRY_ADDRESS    0x1E00120
+#endif
+CODE_BEG   = CONFIG_ENTRY_ADDRESS;
 
 UPDATA_BREDR_BASE_BEG = 0xF9000;
 
@@ -84,7 +90,7 @@ MEMORY
     psram(rwx)        : ORIGIN =  PSRAM_BEG , LENGTH = PSRAM_SIZE
 #if (USE_SDFILE_NEW)
 #ifndef CONFIG_LARGE_PROGRAM_ENABLE
-	code0(rx)    	  : ORIGIN =  0x1E00120,    LENGTH = CONFIG_FLASH_SIZE
+	code0(rx)    	  : ORIGIN =  CONFIG_ENTRY_ADDRESS,    LENGTH = CONFIG_FLASH_SIZE
 #else /* #ifdef CONFIG_LARGE_PROGRAM_ENABLE */
 	code0(rx)    	  : ORIGIN =  0x1000120,    LENGTH = CONFIG_FLASH_SIZE
 #endif /* #ifdef CONFIG_LARGE_PROGRAM_ENABLE */
