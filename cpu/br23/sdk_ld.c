@@ -1,4 +1,5 @@
 // *INDENT-OFF*
+// Rebuild trigger: 2026-04-04
 #include "app_config.h"
 
 /*
